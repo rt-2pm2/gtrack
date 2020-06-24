@@ -3,6 +3,7 @@ SHELL = /bin/bash
 
 source_dir := src
 binary_dir := bin
+data_dir := data
 
 program := gtrak
 modules := $(shell basename -a $(shell find ./src -mindepth 1 -type d))
@@ -20,7 +21,7 @@ CPPFLAGS += `pkg-config opencv4 --cflags` `pkg-config eigen3 --cflags`
 LDFLAGS += `pkg-config opencv4 --libs` `pkg-config eigen3 --libs` -lrealsense2 -lpthread
 
 _obj_fld := $(dir $(objects))
-_build_dirs := $(shell for d in $(_obj_fld); \
+_build_dirs := $(shell for d in $(_obj_fld) $(data_dir); \
 	do \
 	echo -e "$$d\n";\
 	[ ! -d $$d ] && mkdir -p $$d;\

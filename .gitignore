@@ -30,3 +30,17 @@
 *.exe
 *.out
 *.app
+
+# Vim
+*.swp
+
+# Data
+data/*
+*.csv
+*.avi
+
+
+# Scripts
+*.sh
+*.gnuplot
+

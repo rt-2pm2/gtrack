@@ -82,6 +82,8 @@ int main(int argc, char* argv[]) {
 	// =========================================
 	// Tracker
 	Tracker trk;
+
+	trk.add_target(0, cv::Rect2d(500, 150, 70, 75));
 	trk.setCamMatrix(intr, 0.0001);
 
 	// =========================================
@@ -159,11 +161,11 @@ int main(int argc, char* argv[]) {
 				std::array<int, 3> v;
 				std::array<float, 3> pos;
 
-				trk.get_mask(mask);
-				trk.get_img_tg(tg);
-				trk.get_depthTG(v);
-				trk.get_ROI(roi);
-				trk.get_b_tg(pos);
+				trk.get_mask(0, mask);
+				trk.get_img_tg(0, tg);
+				trk.get_depthTG(0, v);
+				trk.get_ROI(0, roi);
+				trk.get_b_tg(0, pos);
 				cv::imshow("Mask", mask);
 
 				// Filter update
@@ -210,7 +212,7 @@ int main(int argc, char* argv[]) {
 				}
 
 				cv::Mat fl_mask;
-				trk.get_flowmask(fl_mask);
+				trk.get_flowmask(0, fl_mask);
 				if (!fl_mask.empty())
 					imshow("Flow", fl_mask); 
 
@@ -225,7 +227,7 @@ int main(int argc, char* argv[]) {
 
 				cv::Mat hist_img;
 				cv::Mat depth_roi;
-				trk.get_depthROI(depth_roi);
+				trk.get_depthROI(0, depth_roi);
 				int numBins = 300;	
 				trk.get_histogram(hist_img, numBins, depth_roi, v[2]);
 

@@ -8,9 +8,20 @@
 #include "utils/timelib.hpp"
 
 
-Tracker::Tracker() {
-	_tg_data.roi = cv::Rect2d(500, 150, 70, 75);
+Tracker::Tracker() {}
+
+
+Tracker::~Tracker() {
+	stop_flow();
+	_flow_thread_active = false;
+	if (_flow_thread.joinable())
+		_flow_thread.join();
+
+	for (auto el : _targets) {
+		delete el.second;
+	}
 }
+
 
 void Tracker::start_flow() {
 	_flowActive = true;
@@ -19,45 +30,60 @@ void Tracker::start_flow() {
 	_flow_thread = std::thread(&Tracker::opticalflow_runnable, this);
 }
 
+
 void Tracker::stop_flow() {
 	_flowActive = false;
 }
 
-Tracker::~Tracker() {
-	stop_flow();
-	_flow_thread_active = false;
-	if (_flow_thread.joinable())
-		_flow_thread.join();
 
-	for (auto el : targets) {
-		delete el.second;
+void Tracker::add_target(int id, cv::Rect2d roi) {
+	if (_targets.count(id) == 0) {
+		std::cout << "Adding new target: ID[" << id << "]" << std::endl;
+		TargetData* p_td = new TargetData();
+		p_td->roi = roi;
+		_targets.insert(std::pair<int, TargetData*>(id, p_td));
+	} else {
+		std::cout << "Updating target: ID[" << id << "]" << std::endl;
+		_targets[id]->roi = roi;
 	}
 }
 
-void Tracker::set_roi(int x, int y, int w, int h) {
-	_tg_data.roi = cv::Rect2d(x, y, w, h);
+
+void Tracker::set_roi(int id, int x, int y, int w, int h) {
+	if (_targets.count(id) == 0) {
+		std::cout << "No target with ID = " << id << std::endl;
+		return;
+	} else {
+		_targets[id]->roi = cv::Rect2d(x, y, w, h);
+	}
 }
 
 
-void Tracker::set_position(Eigen::Vector3d& pos) {
+void Tracker::set_position(int id, Eigen::Vector3d& pos) {
 
-	// Get the target position with respect to the camera frame
-	float b_target_[3] {};
-	for (int i = 0; i < 3; i++) {
-		b_target_[i] = pos(i);
+	if (_targets.count(id) == 0) {
+		std::cout << "No target with ID = " << id << std::endl;
+		return;
+	} else {
+		// Get the target position with respect to the camera frame
+		float b_target_[3] {};
+		for (int i = 0; i < 3; i++) {
+			b_target_[i] = pos(i);
+		}
+
+		float upixel[2] {};
+
+		rs2_project_point_to_pixel(upixel, &_camera_intr, b_target_);
+		_targets[id]->img_target.x = upixel[0];
+		_targets[id]->img_target.y = upixel[1];
+
+		// The std of the target area is used to update the height and
+		// width. 
+		_targets[id]->roi.x = upixel[0] -
+			(_targets[id]->roi.height / 2.0);
+		_targets[id]->roi.y = upixel[1] -
+			(_targets[id]->roi.width / 2.0);
 	}
-
-	float upixel[2] {};
-
-	rs2_project_point_to_pixel(upixel, &_camera_intr, b_target_);
-
-	_tg_data.img_target.x = upixel[0];
-	_tg_data.img_target.y = upixel[1];
-
-	// The std of the target area is used to update the height and
-	// width. 
-	_tg_data.roi.x = upixel[0] - (_tg_data.roi.height / 2.0);
-	_tg_data.roi.y = upixel[1] - (_tg_data.roi.width / 2.0);
 }
 
 
@@ -87,79 +113,125 @@ void Tracker::step(cv::Mat& rgb, cv::Mat& depth) {
 	// Copy the RGB frame to the internal variable
 	rgb.copyTo(cvFrame);
 
-	// Extract the ROI region from the RGB image.
-	_tg_data.rgb_roi = cv::Mat(cvFrame, _tg_data.roi);
-	// Extract the ROI region from the Depth image.
-	_tg_data.depth_roi = cv::Mat(depth, _tg_data.roi);
+	// Check the active ROIs
+	for (auto el : _targets) {
+		TargetData* tg_data = el.second;
+
+		// Extract the ROI region from the RGB image.
+		tg_data->rgb_roi = cv::Mat(cvFrame, tg_data->roi);
+		// Extract the ROI region from the Depth image.
+		tg_data->depth_roi = cv::Mat(depth, tg_data->roi);
 	
 
-	// Localization step:
-	find_target_in_roi(_tg_data, nclust, attempts);
+		// Localization step:
+		find_target_in_roi(*tg_data, nclust, attempts);
 
-	// Update the ROI
-	// Compute the pixel coordinates of the target in the full frame.
-	int img_x_global = _tg_data.depth_tg[0] + _tg_data.roi.tl().x;
-	int img_y_global = _tg_data.depth_tg[1] + _tg_data.roi.tl().y;
-	int img_x_std = _tg_data.depth_tg_std[0];
-	int img_y_std = _tg_data.depth_tg_std[1];	
+		// Update the ROI
+		// Compute the pixel coordinates of the target in the full frame.
+		int img_x_global = tg_data->depth_tg[0] + tg_data->roi.tl().x;
+		int img_y_global = tg_data->depth_tg[1] + tg_data->roi.tl().y;
+		int img_x_std = tg_data->depth_tg_std[0];
+		int img_y_std = tg_data->depth_tg_std[1];	
 
-	_tg_data.img_target.x = img_x_global;
-	_tg_data.img_target.y = img_y_global;
-
-
-	// The std of the target area is used to update the height and
-	// width. 
-	// The ROI is moved in the center of the target.
-	_tg_data.roi.height = std::min(150, std::max(5 * img_x_std, 100));
-	_tg_data.roi.width = std::min(150, std::max(5 * img_y_std, 100));
-
-	_tg_data.roi.x = img_x_global - (_tg_data.roi.height / 2.0);
-	_tg_data.roi.y = img_y_global - (_tg_data.roi.width / 2.0);
+		tg_data->img_target.x = img_x_global;
+		tg_data->img_target.y = img_y_global;
 
 
-	// Get the target position with respect to the camera frame
-	float b_target_[3] {};
-	float upixel[2] {(float)img_x_global, (float)img_y_global};
+		// The std of the target area is used to update the height and
+		// width. 
+		// The ROI is moved in the center of the target.
+		tg_data->roi.height = std::min(150, std::max(5 * img_x_std, 100));
+		tg_data->roi.width = std::min(150, std::max(5 * img_y_std, 100));
 
-	rs2_deproject_pixel_to_point(b_target_, &_camera_intr,
-			upixel, _tg_data.depth_tg[2] * _dscale);
+		tg_data->roi.x = img_x_global - (tg_data->roi.height / 2.0);
+		tg_data->roi.y = img_y_global - (tg_data->roi.width / 2.0);
 
-	for (int i = 0; i < 3; i++) {
-		_tg_data.b_tg[i] = b_target_[i];
+
+		// Get the target position with respect to the camera frame
+		float b_target_[3] {};
+		float upixel[2] {(float)img_x_global, (float)img_y_global};
+
+		rs2_deproject_pixel_to_point(b_target_, &_camera_intr,
+				upixel, tg_data->depth_tg[2] * _dscale);
+
+		for (int i = 0; i < 3; i++) {
+			tg_data->b_tg[i] = b_target_[i];
+		}
 	}
 }
 
 
-void Tracker::get_rgbROI(cv::Mat& roi) {
-	roi = _tg_data.rgb_roi;
+void Tracker::get_rgbROI(int id, cv::Mat& roi) {
+	if (_targets.count(id) == 0) {
+		std::cout << "No target with ID = " << id << std::endl;
+		return;
+	} else {
+		_targets[id]->rgb_roi.copyTo(roi);
+	}
 }
 
-void Tracker::get_ROI(cv::Rect2d& roi) {
-	roi = _tg_data.roi;
+void Tracker::get_ROI(int id, cv::Rect2d& roi) {
+	if (_targets.count(id) == 0) {
+		std::cout << "No target with ID = " << id << std::endl;
+		return;
+	} else {
+		roi = _targets[id]->roi;
+	}
 }
 
-void Tracker::get_flowmask(cv::Mat& m) {
-	m = _tg_data.flow_mask;
+void Tracker::get_flowmask(int id, cv::Mat& m) {
+	if (_targets.count(id) == 0) {
+		std::cout << "No target with ID = " << id << std::endl;
+		return;
+	} else {
+		//_targets[id]->flow_mask.copyTo(m);
+		_tg_data.flow_mask.copyTo(m);
+	}
 }
 
-void Tracker::get_img_tg(cv::Point& tg) {
-	tg = _tg_data.img_target;
+void Tracker::get_img_tg(int id, cv::Point& tg) {
+	if (_targets.count(id) == 0) {
+		std::cout << "No target with ID = " << id << std::endl;
+		return;
+	} else {
+		tg = _targets[id]->img_target;
+	}
 }
 
-void Tracker::get_b_tg(std::array<float, 3>& tg) {
-	tg = _tg_data.b_tg;
+void Tracker::get_b_tg(int id, std::array<float, 3>& tg) {
+	if (_targets.count(id) == 0) {
+		std::cout << "No target with ID = " << id << std::endl;
+		return;
+	} else {
+		tg = _targets[id]->b_tg;
+	}
 }
 
-void Tracker::get_mask(cv::Mat& m) {
-	_tg_data.mask.copyTo(m);
+void Tracker::get_mask(int id, cv::Mat& m) {
+	if (_targets.count(id) == 0) {
+		std::cout << "No target with ID = " << id << std::endl;
+		return;
+	} else {
+		_targets[id]->depth_mask.copyTo(m);
+	}
 }
 
-void Tracker::get_depthROI(cv::Mat& m) {
-	_tg_data.depth_roi.copyTo(m);
+void Tracker::get_depthROI(int id, cv::Mat& m) {
+	if (_targets.count(id) == 0) {
+		std::cout << "No target with ID = " << id << std::endl;
+		return;
+	} else {
+		_targets[id]->depth_roi.copyTo(m);
+	}
 }
 
-void Tracker::get_depthTG(std::array<int, 3>& tg) {
-	tg = _tg_data.depth_tg;
+void Tracker::get_depthTG(int id, std::array<int, 3>& tg) {
+	if (_targets.count(id) == 0) {
+		std::cout << "No target with ID = " << id << std::endl;
+		return;
+	} else {
+		tg = _targets[id]->depth_tg;
+	}
 }
 
 
@@ -188,7 +260,7 @@ double Tracker::findTarget_Kmeans(std::array<float, 3>& b_target,
 	// near the one estimated from the target.
 	// Precisely, select the image where the distance is 
 	// < (tg_distance + tg_distance_std)
-	cv::threshold(depth_roi_32f, _tg_data.mask,
+	cv::threshold(depth_roi_32f, _tg_data.depth_mask,
 			tg_dist + 1.0 * tg_dist_std, 1.0,
 			cv::THRESH_BINARY_INV);
 
@@ -196,7 +268,7 @@ double Tracker::findTarget_Kmeans(std::array<float, 3>& b_target,
 
 	// The threshold is a image with 1.0 in the selected region,
 	// compute the center of mass of the selected region.
-	cv::Moments Mm = cv::moments(_tg_data.mask);
+	cv::Moments Mm = cv::moments(_tg_data.depth_mask);
 
 	double x_tg_local = Mm.m10 / Mm.m00;
 	double y_tg_local = Mm.m01 / Mm.m00;
@@ -258,9 +330,9 @@ void Tracker::find_target_in_roi(TargetData& tg_data, int ks, int attempts) {
 
 	// The threshold is a image with 1.0 in the selected region,
 	// compute the center of mass of the selected region.
-	mask.copyTo(tg_data.mask);
+	mask.copyTo(tg_data.depth_mask);
 	cv::Moments Mm = cv::moments(mask);
-	tg_data.img_tg_moments = Mm;
+	tg_data.depth_mask_moments = Mm;
 
 	tg_data.depth_tg[0] = (int)(Mm.m10 / Mm.m00);
 	tg_data.depth_tg[1] = (int)(Mm.m01 / Mm.m00);

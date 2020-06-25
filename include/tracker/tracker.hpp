@@ -15,21 +15,65 @@
 
 
 struct TargetData {
+
+	/**
+	 * Pixel coordinate of the target.
+	 */
+	cv::Point img_target;
+
+	/**
+	 * Coordinates of the target in camera frame
+	 * [m].
+	 */
 	std::array<float, 3> b_tg;
 
+	/**
+	 * Intermediate target information:
+	 * - (u,v) coordinates in image frame
+	 * - depth of that pixel [m].
+	 */
 	std::array<int, 3> depth_tg;
+
+	/**
+	 * Distribution of the target depth
+	 * representation.
+	 */
 	std::array<int, 3> depth_tg_std;
 	
-	cv::Mat mask;
-	cv::Moments img_tg_moments;
+	/**
+	 * Depth Mask selecting the part of the 
+	 * image with the target depth.
+	 */
+	cv::Mat depth_mask;
 
+	/**
+	 * Image moments of the Depth Mask.
+	 */
+	cv::Moments depth_mask_moments;
+
+	/**
+	 * Region Of Interest locating the target.
+	 */
 	cv::Rect2d roi;
-	cv::Mat tg_mask;
-	cv::Mat flow_mask;
-	cv::Mat rgb_roi;
-	cv::Mat depth_roi;
 
-	cv::Point img_target;
+	/**
+	 * Optical Flow mask selecting the part of
+	 * the image where the target generates
+	 * optical flow.
+	 */
+	cv::Mat flow_mask;
+
+	/**
+	 * Part of the image RGB containing the 
+	 * target.
+	 */
+	cv::Mat rgb_roi;
+
+	/**
+	 * Part of the depth image containing the
+	 * target.
+	 */
+	cv::Mat depth_roi;
 };
 
 
@@ -38,9 +82,11 @@ class Tracker {
 		Tracker();
 		~Tracker();
 
-		void set_roi(int x, int y, int w, int h);
+		void add_target(int id, cv::Rect2d roi);
 
-		void set_position(Eigen::Vector3d& pos);
+		void set_roi(int id, int x, int y, int w, int h);
+
+		void set_position(int id, Eigen::Vector3d& pos);
 
 		void position2pixel(cv::Point& pt, const Eigen::Vector3d& pos);
 
@@ -57,24 +103,26 @@ class Tracker {
 
 		void setCamMatrix(rs2_intrinsics intr, double scale);
 
-		void get_ROI(cv::Rect2d& roi);
+		// GETTERS
+		void get_ROI(int i, cv::Rect2d& roi);
 
-		void get_img_tg(cv::Point& tg);
+		void get_img_tg(int i, cv::Point& tg);
 
-		void get_b_tg(std::array<float, 3>& tg);
+		void get_b_tg(int i, std::array<float, 3>& tg);
 
-		void get_mask(cv::Mat& m);
+		void get_mask(int i, cv::Mat& m);
 
-		void get_depthROI(cv::Mat& m);
+		void get_depthROI(int i, cv::Mat& m);
 
-		void get_depthTG(std::array<int, 3>& tg);
+		void get_depthTG(int i, std::array<int, 3>& tg);
 
-		void get_rgbROI(cv::Mat& m); 
+		void get_rgbROI(int i, cv::Mat& m); 
+
+		void get_flowmask(int i, cv::Mat& m);
 
 		void get_histogram(cv::Mat& hist_img, int numBins,
 				const cv::Mat& depth_roi, int target_depth);
 
-		void get_flowmask(cv::Mat& m);
 	private:
 
 		/**
@@ -85,7 +133,7 @@ class Tracker {
 		/**
 		 * Map of detected targets
 		 */
-		std::unordered_map<int, TargetData*> targets;
+		std::unordered_map<int, TargetData*> _targets;
 
 		/** 
 		 * Estimated position of the target in the image

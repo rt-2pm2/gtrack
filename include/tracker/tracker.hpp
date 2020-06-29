@@ -2,6 +2,15 @@
  * \file tracker.hpp
  * \author Luigi
  *
+ * This class models the Target Tracker using the depth camera 
+ * data.
+ *
+ * The tracker is fed with data with a "step" function which 
+ * takes as arguments rgb and depth data.
+ * There is also a thread for the computation of the optical flow.
+ * The idea is to use the optical flow to lock new targets or to 
+ * recover the tracking in case the other method fail.
+ *
  */
 #ifndef _TRACKER_HPP_
 #define _TRACKER_HPP_
@@ -12,10 +21,10 @@
 
 #include <unordered_map>
 #include <thread>
+#include <mutex>
 
 
 struct TargetData {
-
 	/**
 	 * Pixel coordinate of the target.
 	 */
@@ -101,6 +110,10 @@ class Tracker {
 
 		void stop_flow();
 
+		void set_delta_depth_param(double d);
+
+		void set_flow_thr(double thr, double norm_thr);
+
 		void setCamMatrix(rs2_intrinsics intr, double scale);
 
 		// GETTERS
@@ -124,6 +137,10 @@ class Tracker {
 				const cv::Mat& depth_roi, int target_depth);
 
 	private:
+		/**
+		 * Mutex for shared data
+		 */
+		std::mutex _mx;
 
 		/**
 		 * RGB Image
@@ -170,12 +187,15 @@ class Tracker {
 				const cv::Mat& depth,
 				int ks, int attempts, double err);
 
-		double findTarget_Kmeans(std::array<float, 3>& b_target,
-				cv::Point& img_target, const cv::Mat& depth,
-				const cv::Rect2d& roi, int ks, int attemps);
-
-		void find_target_in_roi(TargetData& tg_data,
+		void find_target_in_roi(TargetData* tg_data,
 				int ks, int attempts);
+
+		/**
+		 * Delta Depth used to select the pixel 
+		 * associated to the target in the depth image.
+		 */
+		double _delta_depth_param;
+
 		
 		/**
 		 * Instogram tools
@@ -190,6 +210,13 @@ class Tracker {
 		bool _flowActive;
 		std::thread _flow_thread;
 		void opticalflow_runnable(); 	
+
+
+		/**
+		 * Optical Flow Parameters
+		 */
+		double _min_flow_threshold;
+		double _min_flow_threshold_norm;
 };
 
 #endif

@@ -8,7 +8,13 @@
 #include "utils/timelib.hpp"
 
 
-Tracker::Tracker() {}
+Tracker::Tracker() {
+	_delta_depth_param = 4.0;
+
+	_min_flow_threshold = 1.0;
+	_min_flow_threshold_norm = 0.8;
+
+}
 
 
 Tracker::~Tracker() {
@@ -36,11 +42,23 @@ void Tracker::stop_flow() {
 }
 
 
+void Tracker::set_delta_depth_param(double d) {
+	_delta_depth_param = d;
+}
+
+void Tracker::set_flow_thr(double thr, double norm_thr) {
+ 	_min_flow_threshold = thr;
+	_min_flow_threshold_norm = norm_thr;
+}
+
+
 void Tracker::add_target(int id, cv::Rect2d roi) {
+	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "Adding new target: ID[" << id << "]" << std::endl;
 		TargetData* p_td = new TargetData();
 		p_td->roi = roi;
+		std::cout << "ROI = " << roi << std::endl;
 		_targets.insert(std::pair<int, TargetData*>(id, p_td));
 	} else {
 		std::cout << "Updating target: ID[" << id << "]" << std::endl;
@@ -49,7 +67,9 @@ void Tracker::add_target(int id, cv::Rect2d roi) {
 }
 
 
+
 void Tracker::set_roi(int id, int x, int y, int w, int h) {
+	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "No target with ID = " << id << std::endl;
 		return;
@@ -60,7 +80,7 @@ void Tracker::set_roi(int id, int x, int y, int w, int h) {
 
 
 void Tracker::set_position(int id, Eigen::Vector3d& pos) {
-
+	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "No target with ID = " << id << std::endl;
 		return;
@@ -88,6 +108,7 @@ void Tracker::set_position(int id, Eigen::Vector3d& pos) {
 
 
 void Tracker::position2pixel(cv::Point& pt, const Eigen::Vector3d& pos) {
+	std::unique_lock<std::mutex> lk(_mx);
 	float b_target_[3] {};
 	for (int i = 0; i < 3; i++) {
 		b_target_[i] = pos(i);
@@ -100,6 +121,7 @@ void Tracker::position2pixel(cv::Point& pt, const Eigen::Vector3d& pos) {
 	pt.y = upixel[1];
 }
 
+
 void Tracker::setCamMatrix(rs2_intrinsics intr, double scale) {
 	_camera_intr = intr;
 	_dscale = scale;
@@ -107,13 +129,17 @@ void Tracker::setCamMatrix(rs2_intrinsics intr, double scale) {
 
 
 void Tracker::step(cv::Mat& rgb, cv::Mat& depth) {
+	//XXX I should improve the way I protect the variables
+	std::unique_lock<std::mutex> lk(_mx);
 	int nclust = 4;
 	int attempts = 1;
 
 	// Copy the RGB frame to the internal variable
 	rgb.copyTo(cvFrame);
 
-	// Check the active ROIs
+	// For each ROI perform the localization of the 
+	// target. The idea is that the ROIs are added 
+	// with some other methods (NN, OpticalFlow)
 	for (auto el : _targets) {
 		TargetData* tg_data = el.second;
 
@@ -123,8 +149,14 @@ void Tracker::step(cv::Mat& rgb, cv::Mat& depth) {
 		tg_data->depth_roi = cv::Mat(depth, tg_data->roi);
 	
 
-		// Localization step:
-		find_target_in_roi(*tg_data, nclust, attempts);
+		// Localization step.
+		// This is the core of the localization.
+		// 1) I use a KMeans approach to locate the correct distance of the target 
+		// in the ROI;
+		// 2) I mask the pixel with a given distance from the camera to locate the 
+		// position of the target in the image;
+		// 3) I convert the pixel coordinates into real-world coordinates.
+		find_target_in_roi(tg_data, nclust, attempts);
 
 		// Update the ROI
 		// Compute the pixel coordinates of the target in the full frame.
@@ -162,6 +194,7 @@ void Tracker::step(cv::Mat& rgb, cv::Mat& depth) {
 
 
 void Tracker::get_rgbROI(int id, cv::Mat& roi) {
+	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "No target with ID = " << id << std::endl;
 		return;
@@ -171,6 +204,7 @@ void Tracker::get_rgbROI(int id, cv::Mat& roi) {
 }
 
 void Tracker::get_ROI(int id, cv::Rect2d& roi) {
+	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "No target with ID = " << id << std::endl;
 		return;
@@ -180,6 +214,7 @@ void Tracker::get_ROI(int id, cv::Rect2d& roi) {
 }
 
 void Tracker::get_flowmask(int id, cv::Mat& m) {
+	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "No target with ID = " << id << std::endl;
 		return;
@@ -190,6 +225,7 @@ void Tracker::get_flowmask(int id, cv::Mat& m) {
 }
 
 void Tracker::get_img_tg(int id, cv::Point& tg) {
+	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "No target with ID = " << id << std::endl;
 		return;
@@ -199,6 +235,7 @@ void Tracker::get_img_tg(int id, cv::Point& tg) {
 }
 
 void Tracker::get_b_tg(int id, std::array<float, 3>& tg) {
+	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "No target with ID = " << id << std::endl;
 		return;
@@ -208,6 +245,7 @@ void Tracker::get_b_tg(int id, std::array<float, 3>& tg) {
 }
 
 void Tracker::get_mask(int id, cv::Mat& m) {
+	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "No target with ID = " << id << std::endl;
 		return;
@@ -217,6 +255,7 @@ void Tracker::get_mask(int id, cv::Mat& m) {
 }
 
 void Tracker::get_depthROI(int id, cv::Mat& m) {
+	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "No target with ID = " << id << std::endl;
 		return;
@@ -226,6 +265,7 @@ void Tracker::get_depthROI(int id, cv::Mat& m) {
 }
 
 void Tracker::get_depthTG(int id, std::array<int, 3>& tg) {
+	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "No target with ID = " << id << std::endl;
 		return;
@@ -238,68 +278,12 @@ void Tracker::get_depthTG(int id, std::array<int, 3>& tg) {
 // ============================================================
 // ============================================================
 
-double Tracker::findTarget_Kmeans(std::array<float, 3>& b_target,
-		cv::Point& img_target, const cv::Mat& depth,
-		const cv::Rect2d& roi, int ks, int attempts) {
-
-	cv::Mat labels;
-	double tg_dist;
-	double tg_dist_std;
-
-	// Find the distance from the target.
-	cv::Mat depth_roi = cv::Mat(depth, roi);
-
-	cv::Mat depth_roi_32f;
-	depth_roi.convertTo(depth_roi_32f, CV_32F);
-	depth_roi_32f *= _dscale;
-
-	double compactness = computeKmeans(&tg_dist, &tg_dist_std,
-			depth_roi_32f, ks, attempts, 0.1);
-
-	// Select the part of the image which as a measured distance, 
-	// near the one estimated from the target.
-	// Precisely, select the image where the distance is 
-	// < (tg_distance + tg_distance_std)
-	cv::threshold(depth_roi_32f, _tg_data.depth_mask,
-			tg_dist + 1.0 * tg_dist_std, 1.0,
-			cv::THRESH_BINARY_INV);
-
-	//imshow("Monitor Threshold", thr_img);
-
-	// The threshold is a image with 1.0 in the selected region,
-	// compute the center of mass of the selected region.
-	cv::Moments Mm = cv::moments(_tg_data.depth_mask);
-
-	double x_tg_local = Mm.m10 / Mm.m00;
-	double y_tg_local = Mm.m01 / Mm.m00;
-
-	// Compute the pixel coordinate in the full frame.
-	int img_x_global = x_tg_local + roi.tl().x;
-	int img_y_global = y_tg_local + roi.tl().y;
-
-	// Get the target position with respect to the camera frame
-	float b_target_[3] {};
-	float upixel[2] {(float)img_x_global, (float)img_y_global};
-	rs2_deproject_pixel_to_point(b_target_, &_camera_intr,
-			upixel, tg_dist);
-
-	for (int i = 0; i < 3; i++) {
-		b_target[i] = b_target_[i];
-	}
-
-	img_target.x = img_x_global;
-	img_target.y = img_y_global;
-
-	return tg_dist;
-}
-
-
-void Tracker::find_target_in_roi(TargetData& tg_data, int ks, int attempts) {
+void Tracker::find_target_in_roi(TargetData* tg_data, int ks, int attempts) {
 	double tg_dist;
 	double tg_dist_std;
 
 	cv::Mat depth_roi_32f;
-	tg_data.depth_roi.convertTo(depth_roi_32f, CV_32F);
+	tg_data->depth_roi.convertTo(depth_roi_32f, CV_32F);
 
 	// Compute the depth cluster of the target.
 	double compactness = computeKmeans(&tg_dist, &tg_dist_std,
@@ -308,39 +292,34 @@ void Tracker::find_target_in_roi(TargetData& tg_data, int ks, int attempts) {
 
 	// Select the part of the image which as a measured distance, 
 	// near the one estimated from the target.
-	// Precisely, select the image where the distance is 
-	// < (tg_distance + tg_distance_std)
 	cv::Mat thr1, thr2;
-	cv::Mat mask1, mask2, mask;
-	cv::threshold(depth_roi_32f, thr1,
-			tg_dist + 0.2 * tg_dist_std, 1.0,
-			cv::THRESH_BINARY_INV);
-	cv::bitwise_and(thr1, thr1, mask1);
-	//mask1.convertTo(mask1, CV_8U);
-	
-	cv::threshold(depth_roi_32f, thr2,
-			tg_dist - 4.0 * tg_dist_std, 1.0,
-			cv::THRESH_BINARY);
-	cv::bitwise_and(thr2, thr2, mask2);
-	//mask1.convertTo(mask2, CV_8U);
+	cv::Mat mask;
 
-	cv::bitwise_and(mask1, mask2, mask);
-	//mask.convertTo(mask, CV_8U);
+	double Delta = _delta_depth_param * tg_dist_std;
+
+	// X  < tg_dist + Delta 
+	cv::threshold(depth_roi_32f, thr1, tg_dist + Delta, 1.0,
+			cv::THRESH_BINARY_INV);
+	// X > tg_dist - Delta	
+	cv::threshold(depth_roi_32f, thr2, tg_dist - Delta, 1.0,
+			cv::THRESH_BINARY);
+
+	cv::bitwise_and(thr1, thr2, mask);
 
 
 	// The threshold is a image with 1.0 in the selected region,
 	// compute the center of mass of the selected region.
-	mask.copyTo(tg_data.depth_mask);
+	mask.copyTo(tg_data->depth_mask);
 	cv::Moments Mm = cv::moments(mask);
-	tg_data.depth_mask_moments = Mm;
+	tg_data->depth_mask_moments = Mm;
 
-	tg_data.depth_tg[0] = (int)(Mm.m10 / Mm.m00);
-	tg_data.depth_tg[1] = (int)(Mm.m01 / Mm.m00);
-	tg_data.depth_tg[2] = (int)tg_dist;
+	tg_data->depth_tg[0] = (int)(Mm.m10 / Mm.m00);
+	tg_data->depth_tg[1] = (int)(Mm.m01 / Mm.m00);
+	tg_data->depth_tg[2] = (int)tg_dist;
 
-	tg_data.depth_tg_std[0] = (int)std::sqrt(Mm.mu20 / Mm.m00);
-	tg_data.depth_tg_std[1] = (int)std::sqrt(Mm.mu02 / Mm.m00);
-	tg_data.depth_tg_std[2] = (int)tg_dist_std;
+	tg_data->depth_tg_std[0] = (int)std::sqrt(Mm.mu20 / Mm.m00);
+	tg_data->depth_tg_std[1] = (int)std::sqrt(Mm.mu02 / Mm.m00);
+	tg_data->depth_tg_std[2] = (int)tg_dist_std;
 
 }
 
@@ -369,8 +348,8 @@ double Tracker::computeKmeans(
 	// Run the KMean algorithm on the reshaped depth cv::Mat
 	// to find 'ks' clusters and respective centers
 	double compactness = cv::kmeans(tg_v_nz, ks, labels,
-			cv::TermCriteria(cv::TermCriteria::EPS, 300, err),
-			attempts, cv::KMEANS_PP_CENTERS, centers);
+			cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 20, err), attempts,
+			cv::KMEANS_PP_CENTERS, centers);
 
 	cv::Mat indexes;
 	cv::sortIdx(centers, indexes,
@@ -411,8 +390,8 @@ void Tracker::opticalflow_runnable() {
 
 	timespec nextAct;
 	timespec period;
-	period.tv_nsec = 0 * 1e6; // ms
-	period.tv_sec = 1;
+	period.tv_nsec = 900 * 1e6; // ms
+	period.tv_sec = 0;
 
 	clock_gettime(CLOCK_MONOTONIC, &nextAct);
 
@@ -425,10 +404,13 @@ void Tracker::opticalflow_runnable() {
 	while (_flow_thread_active) {
 		// Compute the next activation
 		add_timespec(&nextAct, &period, &nextAct);
-		
+
+		// In order to reduce the computational load I resize
+		// the image.
+		_mx.lock();
 		cv::resize(cvFrame, cvNext, cv::Size(),
 				0.5, 0.5, cv::INTER_LINEAR);
-		//cvFrame.copyTo(cvNext);
+		_mx.unlock();
 
 		// Convert the image to gray and prepare the flow Mat
 		// The flow is composed by two matrices where each channel is 
@@ -449,15 +431,29 @@ void Tracker::opticalflow_runnable() {
 			cv::cartToPolar(flowParts[0], flowParts[1],
 					magnitude, angle, true);
 
-			cv::normalize(magnitude, magn_norm, 0.0f, 1.0f,
+			// I should check if there is movement before 
+			// normalizing, otherwise I will detect the noise.
+			double max, min;
+			cv::minMaxLoc(magnitude, &min, &max);
+			std::cout << "Orig "<< min << " " << max << std::endl;
+
+			// Thresholding the flow to remove noise.
+			cv::Mat magn_thr;
+			cv::threshold(magnitude, magn_thr, _min_flow_threshold,
+					0, cv::THRESH_TOZERO);
+
+			cv::minMaxLoc(magn_thr, &min, &max);
+
+			cv::normalize(magn_thr, magn_norm, 0.0f, 1.0f,
 					cv::NORM_MINMAX);
 
 			angle *= ((1.f / 360.f) * (180.f / 255.f));
 
 			cv::Mat flow_mask;
 			cv::Mat nonzero_pix;
-			cv::threshold(magnitude, flow_mask, 0.9, 1.0,
-					cv::THRESH_BINARY);
+
+			cv::threshold(magn_norm, flow_mask,
+					_min_flow_threshold_norm, 1.0, cv::THRESH_BINARY);
 			cv::findNonZero(flow_mask, nonzero_pix); 
 			nonzero_pix.convertTo(nonzero_pix, CV_32FC2, 1, 0);
 

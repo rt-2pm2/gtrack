@@ -5,7 +5,7 @@ source_dir := src
 binary_dir := bin
 data_dir := data
 
-program := gtrak
+program := gtrack
 modules := $(shell basename -a $(shell find ./src -mindepth 1 -type d))
 
 sources := $(shell find $(source_dir) -type f -name "*.cpp")

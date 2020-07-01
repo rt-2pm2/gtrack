@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include <thread>
 #include <mutex>
+#include <fstream>
 
 
 struct TargetData {
@@ -41,8 +42,7 @@ struct TargetData {
 	 * - (u,v) coordinates in image frame
 	 * - depth of that pixel [m].
 	 */
-	std::array<int, 3> depth_tg;
-
+	std::array<int, 3> depth_tg; 
 	/**
 	 * Distribution of the target depth
 	 * representation.
@@ -138,6 +138,18 @@ class Tracker {
 
 	private:
 		/**
+		 * Max number of targets for the optical flow analysis.
+		 */
+		int _MaxTargets;
+
+		/**
+		 * Log file
+		 */
+		std::ofstream _log_flow;
+		std::ofstream _log_trk;
+
+
+		/**
 		 * Mutex for shared data
 		 */
 		std::mutex _mx;
@@ -146,6 +158,9 @@ class Tracker {
 		 * RGB Image
 		 */
 		cv::Mat cvFrame;
+
+		int _frame_height;
+		int _frame_width;
 
 		/**
 		 * Map of detected targets
@@ -212,11 +227,36 @@ class Tracker {
 		void opticalflow_runnable(); 	
 
 
+		// Optical Flow Parameters
 		/**
-		 * Optical Flow Parameters
+		 * Under this value the flow is considered zero
 		 */
 		double _min_flow_threshold;
+
+		/**
+		 * Threshold applied to the normalized flow 
+		 */
 		double _min_flow_threshold_norm;
+
+		/**
+		 * The optical flow is computed on a scaled image for reducing
+		 * the computation load. '_opt_flow_scale' is the resize factor.
+		 */
+		double _opt_flow_scale;
+
+		/**
+		 * Period of the task computing the optical flow.
+		 */
+		timespec opt_flow_period;
+
+		/**
+		 * The detection of a new target from the optical flow is made
+		 * considering the clustering of the thresholded normalized 
+		 * flow. The idea is to consider a region a possible target
+		 * when the area is bigger than a given amount.
+		 * '_opt_flow_detect_thr' is that amount.
+		 */
+		double _opt_flow_detect_thr;
 };
 
 #endif

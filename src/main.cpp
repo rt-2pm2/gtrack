@@ -10,8 +10,13 @@
 #include "arucodetector/arucodetector.hpp"
 #include "devinterface/devinterface.hpp"
 #include "tracker/tracker.hpp"
-#include "filter/polyfilter.hpp"
 #include "filter/ddfilter.hpp"
+#include "utils/timelib.hpp"
+
+#define _WIDTH (848)
+#define _HEIGHT (420)
+
+#define ARUCO_DEBUG
 
 using namespace std;
 
@@ -23,7 +28,7 @@ int main(int argc, char* argv[]) {
 
 	ofstream outfile("est.csv");
 
-	std::string filename("record");
+	std::string filename("record_");
 
 	bool playback = true;
 	int option;
@@ -60,8 +65,19 @@ int main(int argc, char* argv[]) {
 
 	// =========================================
 	// Realsense Device	
+	//
+
+	DevConfig devcfg;
+	devcfg.depth_width = 848;
+	devcfg.depth_height = 480;
+	devcfg.depth_framerate = 30;
+	devcfg.rgb_width = 848;
+	devcfg.rgb_height = 480;
+	devcfg.rgb_framerate = 30;
+
+	
 	cout << "Creating the device" << endl;
-	DeviceInterface mydev;
+	DeviceInterface mydev(devcfg);
 	mydev.startDevice(playback, full);
 
 	rs2_intrinsics intr;
@@ -83,16 +99,13 @@ int main(int argc, char* argv[]) {
 	// Tracker
 	Tracker trk;
 
-	trk.add_target(0, cv::Rect2d(500, 150, 70, 75));
+	//trk.add_target(0, cv::Rect2d(1100, 450, 100, 100));
 	trk.setCamMatrix(intr, 0.0001);
 
 	// =========================================
 	// Filters
 	Eigen::Vector3d p0(0.0, 0.0, 0.0);
-	Eigen::Vector3d sigma_x(sx, sx, sx);
-	Eigen::Vector3d sigma_y(sy, sy, sy);
 	double dt = 0.03;
-	PolyFilter polyfil(p0, sigma_x, sigma_y, dt);
 	DDFilter ddfil(p0, 20, dt);
 
 
@@ -107,9 +120,19 @@ int main(int argc, char* argv[]) {
 	cv::namedWindow("Hist", cv::WINDOW_AUTOSIZE);
 	cv::moveWindow("Hist", 1280, 200);
 
-	trk.start_flow();
+	cv::namedWindow("Flow", cv::WINDOW_AUTOSIZE);
+	cv::moveWindow("Flow", 1280, 800);
+
 
 	int InitializationCounter = 20;
+	int CameraStabCounter = 40;
+
+	std::cout << "Activating Flow Thread!" << std::endl;
+	trk.start_flow();
+
+	timespec t_now, t_old;
+	clock_gettime(CLOCK_MONOTONIC, &t_now);
+	t_old = t_now;
 	while (key != 27) {
 		int curr_key = cv::waitKey(1);
 
@@ -123,8 +146,14 @@ int main(int argc, char* argv[]) {
 		}
 
 		// Wait for new data to arrive
-		mydev.synchronize();
-
+		mydev.synchronize();	
+		clock_gettime(CLOCK_MONOTONIC, &t_now);
+		dt = (timespec2micro(&t_now) - timespec2micro(&t_old)) / 1e6;
+		// Avoid too little 'dt'
+		if (dt < 0.0001)
+			dt = 0.001;
+		t_old = t_now;
+		
 		// Get the RGB image
 		mydev.get_rgb(cvRGB);
 
@@ -147,12 +176,16 @@ int main(int argc, char* argv[]) {
 				break;
 		}	
 
+		if (CameraStabCounter > 0) {
+			CameraStabCounter--;
+		}
+
 		double depth_target = 0;
 
 		if (!cvFrame.empty() && !cvRGB.empty() && !cvDepth.empty()) {
 			cv::Mat outputImage = cvFrame.clone();
 
-			if (playback) {
+			if (playback && CameraStabCounter == 0) {
 				trk.step(cvRGB, cvDepth);
 
 				cv::Point tg;
@@ -166,7 +199,9 @@ int main(int argc, char* argv[]) {
 				trk.get_depthTG(0, v);
 				trk.get_ROI(0, roi);
 				trk.get_b_tg(0, pos);
-				cv::imshow("Mask", mask);
+
+				if (!mask.empty())
+					cv::imshow("Mask", mask);
 
 				// Filter update
 				Eigen::Vector3d pos_;
@@ -174,17 +209,14 @@ int main(int argc, char* argv[]) {
 				pos_(1) = pos[1];
 				pos_(2) = pos[2];
 
-				polyfil.prediction(0.03);
-				polyfil.update(pos_);
-
-				ddfil.prediction(0.03);
+				ddfil.prediction(dt);
 				ddfil.update(pos_);
 
-				Eigen::Vector3d est_pos = polyfil.getPos();
 				Eigen::Vector3d est_pos_dd = ddfil.getPos();
 
-				//if (counter++ > 15)
-				//	trk.set_position(est_pos_dd);
+				
+				if (InitializationCounter = 0)
+					trk.set_position(0, est_pos_dd);
 
 				if (InitializationCounter > 0) {
 					InitializationCounter--;
@@ -204,7 +236,7 @@ int main(int argc, char* argv[]) {
 								detect_data.mk_ids_);
 
 						cv::aruco::drawAxis(outputImage,
-								cameraMatrix, distCoeffs,
+								cmat, ddsf,
 								detect_data.rvecs_, detect_data.tvecs_,
 								0.1);
 					}
@@ -215,10 +247,6 @@ int main(int argc, char* argv[]) {
 				trk.get_flowmask(0, fl_mask);
 				if (!fl_mask.empty())
 					imshow("Flow", fl_mask); 
-
-				outfile << polyfil.getPos().transpose() << " "; 
-				outfile << polyfil.getVel().transpose() << " ";
-				//outfile << polyfil.getAcc().transpose();
 
 				outfile << ddfil.getPos().transpose() << " ";
 				outfile << ddfil.getVel().transpose() << " ";
@@ -237,21 +265,31 @@ int main(int argc, char* argv[]) {
 				// Visualization =======================================
 				cv::Point kf_pt;
 				cv::Point dd_pt;
-				trk.position2pixel(kf_pt, est_pos);
 				trk.position2pixel(dd_pt, est_pos_dd);
 
-				cv::circle(outputImage, kf_pt, 10, cv::Scalar(255, 0, 0), 2);
 				cv::circle(outputImage, dd_pt, 10, cv::Scalar(0, 0, 255), 2);
 				cv::circle(outputImage, tg, 15, cv::Scalar(0, 255, 0), 2);
 				cv::rectangle(outputImage, roi, cv::Scalar(0, 0, 255), 2, 1);
 			}
 			cv::imshow("Monitor", outputImage);
+			/*
+			static bool initroi = true;
+			if (initroi) {
+				initroi = false;
+				cv::Rect2d roi;
+				mydev.playbackPause();
+				roi = cv::selectROI("Monitor", outputImage);
+				mydev.playbackResume();
+				trk.add_target(0, roi);
+			}
+			*/
 		}
 
 
 	}
 	outfile.close();
 	cout << "Ending..." << endl;
+	trk.stop_flow();
 	mydev.stopDevice(true);
 
 	return 0;

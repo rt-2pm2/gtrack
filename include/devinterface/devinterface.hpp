@@ -57,6 +57,21 @@ struct DevConfig {
 		depth_format = RS2_FORMAT_Z16;
 		rgb_format = RS2_FORMAT_RGB8;
 	}
+
+	DevConfig(const DevConfig& dc) {
+		playback = dc.playback;
+		depth_width = dc.depth_width;
+		depth_height = dc.depth_height;
+		depth_scale = dc.depth_scale;
+		depth_framerate = dc.depth_framerate;
+
+		rgb_width = dc.rgb_width;
+		rgb_height = dc.rgb_height;
+		rgb_framerate = dc.rgb_framerate;
+
+		depth_format = dc.depth_format;
+		rgb_format = dc.rgb_format;
+	}
 };
 
 
@@ -91,6 +106,17 @@ class DeviceInterface {
 		 * Stop
 		 */
 		void stopDevice(bool wait);
+
+
+		/**
+		 * Pause
+		 */
+		void playbackPause();
+
+		/**
+		 * Resume
+		 */
+		void playbackResume();
 
 		/**
 		 * Get the parameter of the camera

@@ -9,19 +9,37 @@
 
 
 Tracker::Tracker() {
-	_delta_depth_param = 4.0;
+	_MaxTargets = 3;
 
-	_min_flow_threshold = 1.0;
+	_delta_depth_param = 5.0;
+
+	_flow_thread_active = false;
+	 _flowActive = false;;
+
+	_min_flow_threshold = 0.6;
 	_min_flow_threshold_norm = 0.8;
 
+	_opt_flow_scale = 0.5;
+	_opt_flow_detect_thr = 200.0;
+
+	opt_flow_period.tv_nsec = 50 * 1e6; // ms
+	opt_flow_period.tv_sec = 0;
+
+	_log_flow.open("trk_flow_log.csv");
+	_log_trk.open("trk_log.csv");
 }
 
 
 Tracker::~Tracker() {
 	stop_flow();
 	_flow_thread_active = false;
-	if (_flow_thread.joinable())
+	if (_flow_thread.joinable()) {
 		_flow_thread.join();
+		std::cout << "Stopped optical flow thread!" << std::endl;
+	}
+
+	_log_flow.close();
+	_log_trk.close();
 
 	for (auto el : _targets) {
 		delete el.second;
@@ -31,8 +49,11 @@ Tracker::~Tracker() {
 
 void Tracker::start_flow() {
 	_flowActive = true;
-	_flow_thread_active = true;
 
+	if (_flow_thread_active)
+		return;
+
+	_flow_thread_active = true;
 	_flow_thread = std::thread(&Tracker::opticalflow_runnable, this);
 }
 
@@ -71,7 +92,7 @@ void Tracker::add_target(int id, cv::Rect2d roi) {
 void Tracker::set_roi(int id, int x, int y, int w, int h) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
-		std::cout << "No target with ID = " << id << std::endl;
+		//std::cout << "No target with ID = " << id << std::endl;
 		return;
 	} else {
 		_targets[id]->roi = cv::Rect2d(x, y, w, h);
@@ -82,7 +103,7 @@ void Tracker::set_roi(int id, int x, int y, int w, int h) {
 void Tracker::set_position(int id, Eigen::Vector3d& pos) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
-		std::cout << "No target with ID = " << id << std::endl;
+		//std::cout << "No target with ID = " << id << std::endl;
 		return;
 	} else {
 		// Get the target position with respect to the camera frame
@@ -140,6 +161,11 @@ void Tracker::step(cv::Mat& rgb, cv::Mat& depth) {
 	// For each ROI perform the localization of the 
 	// target. The idea is that the ROIs are added 
 	// with some other methods (NN, OpticalFlow)
+	
+	// Get the timestamp
+	timespec t;
+	clock_gettime(CLOCK_MONOTONIC, &t);
+	uint64_t t_micro = timespec2micro(&t);
 	for (auto el : _targets) {
 		TargetData* tg_data = el.second;
 
@@ -147,7 +173,6 @@ void Tracker::step(cv::Mat& rgb, cv::Mat& depth) {
 		tg_data->rgb_roi = cv::Mat(cvFrame, tg_data->roi);
 		// Extract the ROI region from the Depth image.
 		tg_data->depth_roi = cv::Mat(depth, tg_data->roi);
-	
 
 		// Localization step.
 		// This is the core of the localization.
@@ -172,11 +197,19 @@ void Tracker::step(cv::Mat& rgb, cv::Mat& depth) {
 		// The std of the target area is used to update the height and
 		// width. 
 		// The ROI is moved in the center of the target.
-		tg_data->roi.height = std::min(150, std::max(5 * img_x_std, 100));
-		tg_data->roi.width = std::min(150, std::max(5 * img_y_std, 100));
+		tg_data->roi.height = std::min(100, std::max(5 * img_x_std, 100));
+		tg_data->roi.width = std::min(100, std::max(5 * img_y_std, 100));
 
-		tg_data->roi.x = img_x_global - (tg_data->roi.height / 2.0);
-		tg_data->roi.y = img_y_global - (tg_data->roi.width / 2.0);
+		int base_x = img_x_global - (tg_data->roi.height / 2.0);
+		int base_y = img_y_global - (tg_data->roi.width / 2.0);
+
+		tg_data->roi.x = std::max(0,
+				std::min(base_x, cvFrame.cols - (int)tg_data->roi.height)
+				);
+
+		tg_data->roi.y = std::max(0,
+				std::min(base_y, cvFrame.rows - (int)tg_data->roi.width)
+				);
 
 
 		// Get the target position with respect to the camera frame
@@ -189,6 +222,10 @@ void Tracker::step(cv::Mat& rgb, cv::Mat& depth) {
 		for (int i = 0; i < 3; i++) {
 			tg_data->b_tg[i] = b_target_[i];
 		}
+
+		_log_trk << t_micro << " " << el.first << " " <<
+			b_target_[0] << " " << b_target_[1] << " " << b_target_[2] <<
+			std::endl;
 	}
 }
 
@@ -196,7 +233,7 @@ void Tracker::step(cv::Mat& rgb, cv::Mat& depth) {
 void Tracker::get_rgbROI(int id, cv::Mat& roi) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
-		std::cout << "No target with ID = " << id << std::endl;
+		//std::cout << "No target with ID = " << id << std::endl;
 		return;
 	} else {
 		_targets[id]->rgb_roi.copyTo(roi);
@@ -206,7 +243,7 @@ void Tracker::get_rgbROI(int id, cv::Mat& roi) {
 void Tracker::get_ROI(int id, cv::Rect2d& roi) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
-		std::cout << "No target with ID = " << id << std::endl;
+		//std::cout << "No target with ID = " << id << std::endl;
 		return;
 	} else {
 		roi = _targets[id]->roi;
@@ -216,7 +253,7 @@ void Tracker::get_ROI(int id, cv::Rect2d& roi) {
 void Tracker::get_flowmask(int id, cv::Mat& m) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
-		std::cout << "No target with ID = " << id << std::endl;
+		//std::cout << "No target with ID = " << id << std::endl;
 		return;
 	} else {
 		//_targets[id]->flow_mask.copyTo(m);
@@ -227,7 +264,7 @@ void Tracker::get_flowmask(int id, cv::Mat& m) {
 void Tracker::get_img_tg(int id, cv::Point& tg) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
-		std::cout << "No target with ID = " << id << std::endl;
+		//std::cout << "No target with ID = " << id << std::endl;
 		return;
 	} else {
 		tg = _targets[id]->img_target;
@@ -237,7 +274,7 @@ void Tracker::get_img_tg(int id, cv::Point& tg) {
 void Tracker::get_b_tg(int id, std::array<float, 3>& tg) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
-		std::cout << "No target with ID = " << id << std::endl;
+		//std::cout << "No target with ID = " << id << std::endl;
 		return;
 	} else {
 		tg = _targets[id]->b_tg;
@@ -247,7 +284,7 @@ void Tracker::get_b_tg(int id, std::array<float, 3>& tg) {
 void Tracker::get_mask(int id, cv::Mat& m) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
-		std::cout << "No target with ID = " << id << std::endl;
+		//std::cout << "No target with ID = " << id << std::endl;
 		return;
 	} else {
 		_targets[id]->depth_mask.copyTo(m);
@@ -257,7 +294,7 @@ void Tracker::get_mask(int id, cv::Mat& m) {
 void Tracker::get_depthROI(int id, cv::Mat& m) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
-		std::cout << "No target with ID = " << id << std::endl;
+		//std::cout << "No target with ID = " << id << std::endl;
 		return;
 	} else {
 		_targets[id]->depth_roi.copyTo(m);
@@ -267,7 +304,7 @@ void Tracker::get_depthROI(int id, cv::Mat& m) {
 void Tracker::get_depthTG(int id, std::array<int, 3>& tg) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
-		std::cout << "No target with ID = " << id << std::endl;
+		//std::cout << "No target with ID = " << id << std::endl;
 		return;
 	} else {
 		tg = _targets[id]->depth_tg;
@@ -357,11 +394,8 @@ double Tracker::computeKmeans(
 
 	// Create a mask to select the element of the different clusters.
 	int min_loc = indexes.at<int>(0);
-	cv::Mat index = (labels == min_loc);
+	cv::Mat mask = (labels == min_loc);
 	float min = centers.at<float>(min_loc);
-
-	cv::Mat mask;
-	cv::bitwise_and(index, index, mask);
 
 	// Compute Mean and Std of the clusters.
 	std::vector<double> avg;
@@ -384,42 +418,47 @@ void Tracker::opticalflow_runnable() {
 	double poly_sigma = poly_n * 0.2;
 	int flags = 0;
 
-	cv::VideoWriter oWriter_flow("./output_flow.avi",
-			cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 5,
-			cv::Size(1280, 720), true);
-
-	timespec nextAct;
-	timespec period;
-	period.tv_nsec = 900 * 1e6; // ms
-	period.tv_sec = 0;
-
-	clock_gettime(CLOCK_MONOTONIC, &nextAct);
-
-	while(cvFrame.empty()) {}
+	uint64_t T_us = timespec2micro(&opt_flow_period);
 
 	cv::Mat flow;
 	cv::Mat magnitude, angle, magn_norm;
 	cv::Mat cvPrev, cvNext;
+	cv::Mat bgr;
 
+	timespec nextAct;
+	timespec temp;	
+
+	_log_flow << "time[us] id min_flow max_flow xpix ypix" << std::endl;
+
+	// Wait to have a valid Frame
+	while (cvFrame.empty()) {}
+
+	_frame_height = cvFrame.rows;
+	_frame_width = cvFrame.cols;
+
+	int flow_height = _frame_height * _opt_flow_scale;
+	int flow_width = _frame_width * _opt_flow_scale;
+	cv::VideoWriter oWriter_flow("./output_flow.avi",
+			cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 1e6 / T_us,
+			cv::Size(flow_width, flow_height), true);
+
+	clock_gettime(CLOCK_MONOTONIC, &nextAct);
 	while (_flow_thread_active) {
 		// Compute the next activation
-		add_timespec(&nextAct, &period, &nextAct);
+		add_timespec(&nextAct, &opt_flow_period, &nextAct);
 
-		// In order to reduce the computational load I resize
-		// the image.
+		// In order to reduce the computational load I resize the image.
 		_mx.lock();
 		cv::resize(cvFrame, cvNext, cv::Size(),
-				0.5, 0.5, cv::INTER_LINEAR);
+				_opt_flow_scale, _opt_flow_scale, cv::INTER_LINEAR);
 		_mx.unlock();
 
 		// Convert the image to gray and prepare the flow Mat
 		// The flow is composed by two matrices where each channel is 
 		// a coordinate (x, y)
 		cv::cvtColor(cvNext, cvNext, cv::COLOR_RGB2GRAY);
-
 		if (!cvPrev.empty() && _flowActive) {
-			cv::Mat bgr;
-
+			clock_gettime(CLOCK_MONOTONIC, &temp);
 			cv::calcOpticalFlowFarneback(cvPrev, cvNext, flow, 
 					pyr_scale, levels,
 					winsize, niters,
@@ -431,27 +470,22 @@ void Tracker::opticalflow_runnable() {
 			cv::cartToPolar(flowParts[0], flowParts[1],
 					magnitude, angle, true);
 
-			// I should check if there is movement before 
-			// normalizing, otherwise I will detect the noise.
 			double max, min;
 			cv::minMaxLoc(magnitude, &min, &max);
-			std::cout << "Orig "<< min << " " << max << std::endl;
-
+			
 			// Thresholding the flow to remove noise.
 			cv::Mat magn_thr;
 			cv::threshold(magnitude, magn_thr, _min_flow_threshold,
 					0, cv::THRESH_TOZERO);
-
-			cv::minMaxLoc(magn_thr, &min, &max);
-
+			// Normalizing
 			cv::normalize(magn_thr, magn_norm, 0.0f, 1.0f,
 					cv::NORM_MINMAX);
-
 			angle *= ((1.f / 360.f) * (180.f / 255.f));
 
 			cv::Mat flow_mask;
 			cv::Mat nonzero_pix;
-
+			
+			// Select the part with a noticeable movement
 			cv::threshold(magn_norm, flow_mask,
 					_min_flow_threshold_norm, 1.0, cv::THRESH_BINARY);
 			cv::findNonZero(flow_mask, nonzero_pix); 
@@ -459,16 +493,66 @@ void Tracker::opticalflow_runnable() {
 
 			_tg_data.flow_mask = flow_mask;
 
-			if (!nonzero_pix.empty()) {
-				int ks = 1;
+			int Npix = nonzero_pix.total();
+			_log_flow << timespec2micro(&temp) << " " << min <<
+						" " << max << " " << Npix << std::endl;
+			if (Npix > _opt_flow_detect_thr) {
+				int ks = std::min(_MaxTargets, Npix);
 				int attempts = 2;
 				cv::Mat centers;
 				cv::Mat labels;
 				double err = 0.5;
-				cv::kmeans(nonzero_pix, ks, labels,
+
+				double perf = cv::kmeans(nonzero_pix, ks, labels,
 						cv::TermCriteria(cv::TermCriteria::EPS +
-							cv::TermCriteria::COUNT, 20, err),
+							cv::TermCriteria::COUNT, 50, err),
 						attempts, cv::KMEANS_PP_CENTERS, centers);
+					
+				centers = centers / _opt_flow_scale;
+				
+				// Check if the movement is associated to a point
+				// which is already tracked
+				//
+				for (int i = 0; i < ks; i++) {
+
+					cv::Mat mask = (labels == i);
+					double area = cv::sum(mask)[0];	
+
+					if (area > _opt_flow_detect_thr) {	
+						bool newpoint = true;
+						cv::Point p(centers.row(i));
+						//std::cout << "Point = " << p << std::endl;
+
+						for (auto el : _targets) {
+							//std::cout << el.second->roi << std::endl;
+							if (el.second->roi.contains(p)) {
+								newpoint = false;	
+							}	
+						}
+						if (newpoint) {
+							//std::cout << "[" << i << "] " <<
+							//	"Flow Sum = " << area << std::endl;
+							
+							//std::cout << "New target " <<
+							//	"@ x = " << p.x << " y = " << p.y <<
+							//	std::endl;
+	
+							int base_x = p.x - 80;
+							int base_y = p.y - 80;
+
+							int roix = std::max(0,
+									std::min(base_x, _frame_width - 160)
+									);
+
+							int roiy = std::max(0,
+									std::min(base_y, _frame_height - 160)
+									);
+
+							cv::Rect2d tgroi(roix, roiy, 160, 160);	
+							add_target(0, tgroi);
+						}
+					}
+				}
 			}
 
 			//build hsv image
@@ -485,7 +569,7 @@ void Tracker::opticalflow_runnable() {
 			if (!bgr.empty()) {
 				cv::Mat out;
 				cv::cvtColor(bgr, out, cv::COLOR_BGR2RGB);
-				oWriter_flow.write(out);
+				oWriter_flow.write(bgr);
 			}
 		}
 
@@ -494,6 +578,7 @@ void Tracker::opticalflow_runnable() {
 	}
 
 	oWriter_flow.release();
+	std::cout << "Terminating FlowThread!" << std::endl;
 }
 
 void Tracker::computeHist(cv::Mat& hist, int numBins,

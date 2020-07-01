@@ -1,4 +1,5 @@
 #include "utils/timelib.hpp"
+#include <cstdint>
 
 void add_timespec(const timespec* t1, const timespec* d, timespec* out) {
 	out->tv_nsec = d->tv_nsec + t1->tv_nsec;
@@ -20,4 +21,9 @@ double sub_timespec(const timespec* t1, const timespec* t2) {
 	}
 
 	out = sec + nsec / 1e9;
+}
+
+uint64_t timespec2micro(const timespec* t) {
+	uint64_t out = t->tv_sec * 1e6 + t->tv_nsec / 1e3;
+	return out;
 }

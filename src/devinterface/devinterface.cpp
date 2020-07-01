@@ -11,9 +11,47 @@
 
 DeviceInterface::DeviceInterface() {
 	playback = false;
+	active = false;
+
 	dev_cfg.playback = playback;
 
-	// Configure and start the pipeline
+	input_queue = new rs2::frame_queue(QUEUE_SIZE, false);
+	filt_queue = new rs2::frame_queue(QUEUE_SIZE, false);
+
+	init = true;
+}
+
+DeviceInterface::DeviceInterface(const DevConfig& cf) : dev_cfg(cf){
+	active = false;
+	playback = false;
+	dev_cfg.playback = playback;
+
+	input_queue = new rs2::frame_queue(QUEUE_SIZE, false);
+	filt_queue = new rs2::frame_queue(QUEUE_SIZE, false);
+	init = true;
+}
+
+DeviceInterface::~DeviceInterface() {
+	active = false;
+
+	if (input_thread.joinable()) {
+		input_thread.join();
+		std::cout << "Stopped input thread!" << std::endl;
+	}
+	
+	if (conversion_thread.joinable()) {
+		conversion_thread.join();
+		std::cout << "Stopped conversion thread!" << std::endl;
+	}
+
+	std::cout << "Device Stopped!" << std::endl;
+};
+
+
+// ========================================================
+bool DeviceInterface::startDevice(bool playback, std::string bag_name) {
+
+	// Configure the pipeline
 	_cfg.enable_stream(RS2_STREAM_DEPTH,
 			dev_cfg.depth_width, dev_cfg.depth_height,
 			dev_cfg.depth_format,
@@ -24,32 +62,6 @@ DeviceInterface::DeviceInterface() {
 			dev_cfg.rgb_format,
 			dev_cfg.rgb_framerate);
 
-	input_queue = new rs2::frame_queue(QUEUE_SIZE, false);
-	filt_queue = new rs2::frame_queue(QUEUE_SIZE, false);
-
-	init = true;
-}
-
-DeviceInterface::DeviceInterface(const DevConfig& cf) {
-	input_queue = new rs2::frame_queue(QUEUE_SIZE, false);
-	filt_queue = new rs2::frame_queue(QUEUE_SIZE, false);
-}
-
-DeviceInterface::~DeviceInterface() {
-	active = false;
-
-	if (input_thread.joinable())
-		input_thread.join();
-	
-	if (conversion_thread.joinable())
-		conversion_thread.join();
-
-	std::cout << "Device Stopped!" << std::endl;
-};
-
-
-// ========================================================
-bool DeviceInterface::startDevice(bool playback, std::string bag_name) {
 	std::cout << "Starting Pipeline..." << std::endl;
 
 	if (!init) { 
@@ -102,14 +114,27 @@ void DeviceInterface::stopDevice(bool wait) {
 	active = false;
 
 	if (wait) {
-		if (input_thread.joinable())
+		if (input_thread.joinable()) {
 			input_thread.join();
+			std::cout << "Stopped input thread!" << std::endl;
+		}
 
-		if (conversion_thread.joinable())
+		if (conversion_thread.joinable()) {
 			conversion_thread.join();
+			std::cout << "Stopped conversion thread!" << std::endl;
+		}
 	}
 }
 
+void DeviceInterface::playbackPause() {
+	if (playback)
+		profile.get_device().as<rs2::playback>().pause();
+}
+
+void DeviceInterface::playbackResume() {
+	if (playback)
+		profile.get_device().as<rs2::playback>().resume();
+}
 
 bool DeviceInterface::getCameraParam(cv::Mat& cameraMatrix, cv::Mat& dCoeff) {
 	bool out = false;

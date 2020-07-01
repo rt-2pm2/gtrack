@@ -22,7 +22,7 @@ Tracker::Tracker() {
 	_opt_flow_scale = 0.5;
 	_opt_flow_detect_thr = 200.0;
 
-	opt_flow_period.tv_nsec = 50 * 1e6; // ms
+	opt_flow_period.tv_nsec = 200 * 1e6; // ms
 	opt_flow_period.tv_sec = 0;
 
 	_log_flow.open("trk_flow_log.csv");

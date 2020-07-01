@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
 
 	ofstream outfile("est.csv");
 
-	std::string filename("record_");
+	std::string filename("record_");	
 
 	bool playback = true;
 	int option;
@@ -58,6 +58,11 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
+	outfile << "Time" << " ";
+	outfile << "w_px w_py w_pz" << " ";
+	outfile << "b_px b_py b_pz" << " ";
+	outfile << "b_vx b_vy b_vz" << " ";
+	outfile << "b_ax b_ay b_az" << std::endl;
 
 	cout << "Starting..." << endl;
 	std::string full = std::string("data/") + filename+std::string(".bag");
@@ -90,6 +95,10 @@ int main(int argc, char* argv[]) {
 	cv::Mat cvRGB, cvDepth, cvDepthCol, cvFrame;
 	std::string title;
 	
+	cv::VideoWriter oWriter_rgb("./output_rgb.avi",
+			cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10,
+			cv::Size(devcfg.depth_width, devcfg.depth_height), true);
+
 	// =========================================
 	// Aruco Detector
 	// Import the camera intrisic from the realsense
@@ -212,11 +221,12 @@ int main(int argc, char* argv[]) {
 				ddfil.prediction(dt);
 				ddfil.update(pos_);
 
-				Eigen::Vector3d est_pos_dd = ddfil.getPos();
-
+				Eigen::Vector3d est_p = ddfil.getPos();
+				Eigen::Vector3d est_v = ddfil.getVel();
 				
-				if (InitializationCounter = 0)
-					trk.set_position(0, est_pos_dd);
+				if (InitializationCounter == 0){
+					//trk.set_position(0, est_p);
+				}
 
 				if (InitializationCounter > 0) {
 					InitializationCounter--;
@@ -243,15 +253,23 @@ int main(int argc, char* argv[]) {
 #endif
 				}
 
+				// Compute the position of the target w.r.t the World Frame
+				Eigen::Vector3d W_t = (aruco_map[1].q_CM_.inverse() * (pos_ - aruco_map[1].C_p_CM_));
+
+				outfile << timespec2micro(&t_now) << " ";
+				outfile << W_t(0) << " " << W_t(1) << " " << W_t(2) << " ";
+				outfile << est_p(0) << " " << est_p(1) << " " << est_p(2) << " ";
+				outfile << est_v(0) << " " << est_v(1) << " " << est_v(2) << " ";
+				outfile << aruco_map[1].C_p_CM_(0) << " " <<
+					aruco_map[1].C_p_CM_(1) << " " << aruco_map[1].C_p_CM_(2);
+				outfile << endl;
+
+
+				/*
 				cv::Mat fl_mask;
 				trk.get_flowmask(0, fl_mask);
 				if (!fl_mask.empty())
-					imshow("Flow", fl_mask); 
-
-				outfile << ddfil.getPos().transpose() << " ";
-				outfile << ddfil.getVel().transpose() << " ";
-				outfile << endl;
-				//outfile << ddfil.getAcc().transpose() << endl;
+					imshow("Flow", fl_mask);
 
 				cv::Mat hist_img;
 				cv::Mat depth_roi;
@@ -260,18 +278,22 @@ int main(int argc, char* argv[]) {
 				trk.get_histogram(hist_img, numBins, depth_roi, v[2]);
 
 				cv::imshow("Hist", hist_img);
+				*/
 
 				// =====================================================
 				// Visualization =======================================
 				cv::Point kf_pt;
 				cv::Point dd_pt;
-				trk.position2pixel(dd_pt, est_pos_dd);
+				trk.position2pixel(dd_pt, est_p);
 
 				cv::circle(outputImage, dd_pt, 10, cv::Scalar(0, 0, 255), 2);
 				cv::circle(outputImage, tg, 15, cv::Scalar(0, 255, 0), 2);
 				cv::rectangle(outputImage, roi, cv::Scalar(0, 0, 255), 2, 1);
 			}
+			//cout << " DT = " << dt << endl;
 			cv::imshow("Monitor", outputImage);
+			oWriter_rgb.write(outputImage);
+
 			/*
 			static bool initroi = true;
 			if (initroi) {
@@ -287,6 +309,7 @@ int main(int argc, char* argv[]) {
 
 
 	}
+	oWriter_rgb.release();
 	outfile.close();
 	cout << "Ending..." << endl;
 	trk.stop_flow();

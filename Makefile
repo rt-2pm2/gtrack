@@ -31,7 +31,7 @@ vpath %.cpp $(source_dir)
 
 .PHONY: program
 program: $(objects)
-	$(CXX) -o $(program) $^ $(LDFLAGS) 
+	$(CXX) -o $(binary_dir)/$(program) $^ $(LDFLAGS) 
 
 $(binary_dir)/%.o: $(source_dir)/%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $^ -o $@

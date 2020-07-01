@@ -38,9 +38,10 @@
 data/*
 *.csv
 *.avi
-
+bin/*
 
 # Scripts
 *.sh
 *.gnuplot
+
 

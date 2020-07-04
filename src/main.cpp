@@ -13,8 +13,8 @@
 #include "filter/ddfilter.hpp"
 #include "utils/timelib.hpp"
 
-#define _WIDTH (848)
-#define _HEIGHT (420)
+#define _WIDTH (1280)
+#define _HEIGHT (720)
 
 #define ARUCO_DEBUG
 
@@ -73,11 +73,11 @@ int main(int argc, char* argv[]) {
 	//
 
 	DevConfig devcfg;
-	devcfg.depth_width = 848;
-	devcfg.depth_height = 480;
+	devcfg.depth_width = _WIDTH;
+	devcfg.depth_height = _HEIGHT;
 	devcfg.depth_framerate = 30;
-	devcfg.rgb_width = 848;
-	devcfg.rgb_height = 480;
+	devcfg.rgb_width = _WIDTH;
+	devcfg.rgb_height = _HEIGHT;
 	devcfg.rgb_framerate = 30;
 
 	
@@ -137,7 +137,8 @@ int main(int argc, char* argv[]) {
 	int CameraStabCounter = 40;
 
 	std::cout << "Activating Flow Thread!" << std::endl;
-	trk.start_flow();
+	if (playback)
+		trk.start_flow();
 
 	timespec t_now, t_old;
 	clock_gettime(CLOCK_MONOTONIC, &t_now);

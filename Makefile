@@ -18,7 +18,7 @@ CXXFLAGS += -g
 CPPFLAGS += $(addprefix -I, $(include_dirs))
 CPPFLAGS += `pkg-config opencv4 --cflags` `pkg-config eigen3 --cflags`
 
-LDFLAGS += `pkg-config opencv4 --libs` `pkg-config eigen3 --libs` -lrealsense2 -lpthread
+LDFLAGS += `pkg-config opencv4 --libs` `pkg-config eigen3 --libs` -lrealsense2 -lpthread -ljsoncpp
 
 _obj_fld := $(dir $(objects))
 _build_dirs := $(shell for d in $(_obj_fld) $(data_dir); \

@@ -7,6 +7,7 @@
 #include <iostream>
 #include "utils/opencv_conv.hpp"
 #include "devinterface/devinterface.hpp"
+#include "utils/timelib.hpp"
 
 
 DeviceInterface::DeviceInterface() {
@@ -196,7 +197,6 @@ bool DeviceInterface::synchronize() {
 // ===========================================================
 // ===========================================================
 void DeviceInterface::signal_new() {
-
 	cv_synch.notify_all();
 }
 
@@ -250,12 +250,23 @@ void DeviceInterface::filtering() {
 
 	unsigned int frame_counter = 0;
 
+	double dt = 0;
+	timespec t_now, t_old;
+	clock_gettime(CLOCK_MONOTONIC, &t_now);
+	t_old = t_now;
+
 	while (active) {
 		rs2::frameset fs_raw;	
 		rs2::frameset fs_filt;
 		fs_raw = input_queue->wait_for_frame();
 
 		if (fs_raw) {
+
+			clock_gettime(CLOCK_MONOTONIC, &t_now);
+			dt = (timespec2micro(&t_now) - timespec2micro(&t_old)) / 1e6;
+			t_old = t_now;
+			//std::cout << "Sensor DT = " << dt << std::endl;
+
 			frame_counter++;
 			double timestamp = fs_raw.get_timestamp();
 			fs_filt = fs_raw;

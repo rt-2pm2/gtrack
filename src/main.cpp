@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <fstream>
 #include <unordered_map>
+#include <jsoncpp/json/json.h>
+#include <sys/stat.h>
 
 #include "arucodetector/arucodetector.hpp"
 #include "devinterface/devinterface.hpp"
@@ -13,30 +15,110 @@
 #include "filter/ddfilter.hpp"
 #include "utils/timelib.hpp"
 
-#define _WIDTH (1280)
-#define _HEIGHT (720)
-
 #define ARUCO_DEBUG
 
 using namespace std;
 
-std::unordered_map<int, BodyTarget> aruco_map;
+int _WIDTH = 1280;
+int _HEIGHT = 720;
+int _FPS = 30;
+double _DEPTH_SCALE = 0.0001;
 
+bool shutting_down = false;
+
+std::unordered_map<int, BodyTarget> aruco_map;
+std::thread tracking_thr;
+
+struct tracker_arg {
+	DeviceInterface* pdev;
+	Tracker* ptrk;
+	DDFilter* pfilt;
+}; 
+
+bool file_exist(std::string filename) {
+	bool out = false;
+	struct stat buf;
+
+	if ((stat(filename.c_str(), &buf) == 0)) {
+		out = true;
+	}
+	return out;
+}
+
+void track_runnable(void* arg) {
+	tracker_arg* parg = static_cast<tracker_arg*>(arg);
+
+	DeviceInterface* pdev = parg->pdev;
+	Tracker* ptrk = parg->ptrk;
+	DDFilter* pfilt = parg->pfilt;
+	
+
+	double dt = 0.03;
+	timespec t_now, t_old;
+	t_old = t_now;
+
+	int CameraStabCounter = 40;
+
+	cv::Mat cvRGB, cvDepth;
+	cv::Mat cvFrameDepth;	
+	std::array<float, 3> pos;
+
+	std::cout << "Activating Flow Thread!" << std::endl;
+	ptrk->start_flow();
+
+	while (!shutting_down) {
+		// This runnable is synchronized on the arrival of new frame
+		pdev->synchronize();	
+
+		clock_gettime(CLOCK_MONOTONIC, &t_now);
+		dt = (timespec2micro(&t_now) - timespec2micro(&t_old)) / 1e6;
+		t_old = t_now;
+
+		cout << "Tracker DT = " << dt << endl;
+
+		// Avoid too little 'dt'
+		if (dt < 0.0001)
+			dt = 0.001;
+
+		pfilt->prediction(dt);
+
+		// Get the RGB image
+		pdev->get_rgb(cvRGB);
+		pdev->get_depth(cvDepth);
+
+		if (CameraStabCounter > 0) {
+			CameraStabCounter--;
+		}
+
+		double depth_target = 0;
+
+		if (!cvRGB.empty() && !cvDepth.empty()) {
+			// Check whether the camera is stabilized
+			if (CameraStabCounter == 0) {
+				ptrk->step(cvRGB, cvDepth);
+
+				ptrk->get_b_tg(0, pos);
+				Eigen::Vector3d pos_(pos[0], pos[1], pos[2]);
+				pfilt->update(pos_);
+			}
+		}
+	}
+	ptrk->stop_flow();
+}
 
 int main(int argc, char* argv[]) {
 	int key = 49;
 
+	double dt;	
 	ofstream outfile("est.csv");
 
 	std::string filename("record_");	
+	std::string config_file("config.json");
 
 	bool playback = true;
 	int option;
 
-	double sx = 10.0;
-	double sy = 0.001;
-
-	while ((option = getopt(argc, argv, ":p:f:c:")) != -1) {
+	while ((option = getopt(argc, argv, ":p:f:")) != -1) {
 		switch (option) {
 			//For option i, r, l, print that these are options
 			case 'p':
@@ -52,9 +134,6 @@ int main(int argc, char* argv[]) {
 				filename = std::string(optarg);
 				cout << "Filename : " << filename << endl;
 				break;
-			case 'c':
-				sy = atof(optarg);
-				cout << "PolyFilter x std: " << sy << endl;
 		}
 	}
 
@@ -65,26 +144,49 @@ int main(int argc, char* argv[]) {
 	outfile << "b_ax b_ay b_az" << std::endl;
 
 	cout << "Starting..." << endl;
-	std::string full = std::string("data/") + filename+std::string(".bag");
-	cout  << full << endl;
+	std::string full = std::string("data/") + filename + std::string(".bag");
+
+	if (file_exist(full) && !playback) {
+		std::cerr << "File already exist!" << std::endl;
+		return -1;
+	}
+
+	if (file_exist(config_file)) {
+		cout << "Found configuration file!" << endl;
+		bool isParsable = false;
+		Json::CharReaderBuilder builder;
+		Json::Value obj;
+		JSONCPP_STRING errs;
+		ifstream ifs(config_file);
+		isParsable = Json::parseFromStream(builder, ifs,
+				&obj, &errs);
+		if (isParsable) {
+			cout << "Parsing..." << endl;
+			_WIDTH = obj["width"].asUInt();
+			_HEIGHT = obj["height"].asUInt();
+			_FPS = obj["fps"].asUInt();
+			_DEPTH_SCALE = obj["depth_scale"].asDouble();
+		} else {
+			cout << "Error parsing..." << endl;
+		}
+	} else {
+		cout << "No config, using default." << endl;
+	}
 
 	// =========================================
 	// Realsense Device	
 	//
-
+	cout << "Creating the device" << endl;
 	DevConfig devcfg;
 	devcfg.depth_width = _WIDTH;
 	devcfg.depth_height = _HEIGHT;
-	devcfg.depth_framerate = 30;
+	devcfg.depth_framerate = _FPS;
 	devcfg.rgb_width = _WIDTH;
 	devcfg.rgb_height = _HEIGHT;
-	devcfg.rgb_framerate = 30;
-
+	devcfg.rgb_framerate = _FPS;
 	
-	cout << "Creating the device" << endl;
 	DeviceInterface mydev(devcfg);
 	mydev.startDevice(playback, full);
-
 	rs2_intrinsics intr;
 	mydev.getCameraParam(intr);
 
@@ -92,7 +194,7 @@ int main(int argc, char* argv[]) {
 	cv::Mat ddsf;
 	mydev.getCameraParam(cmat, ddsf);
 
-	cv::Mat cvRGB, cvDepth, cvDepthCol, cvFrame;
+	cv::Mat cvRGB, cvDepthCol, cvFrame;
 	std::string title;
 	
 	cv::VideoWriter oWriter_rgb("./output_rgb.avi",
@@ -104,19 +206,26 @@ int main(int argc, char* argv[]) {
 	// Import the camera intrisic from the realsense
 	ArucoDetector aruco_detector(cmat, ddsf, 0.10, 0);
 
+	
+	// =========================================
+	// Filter
+	//
+	DDFilter ddfil(Eigen::Vector3d::Zero(), 20, 0.03);
+
+
 	// =========================================
 	// Tracker
 	Tracker trk;
-
 	//trk.add_target(0, cv::Rect2d(1100, 450, 100, 100));
-	trk.setCamMatrix(intr, 0.0001);
-
-	// =========================================
-	// Filters
-	Eigen::Vector3d p0(0.0, 0.0, 0.0);
-	double dt = 0.03;
-	DDFilter ddfil(p0, 20, dt);
-
+	trk.setCamMatrix(intr, _DEPTH_SCALE);
+	tracker_arg trk_arg;
+	
+	if (playback) {
+		trk_arg.pdev = &mydev;
+		trk_arg.ptrk = &trk;
+		trk_arg.pfilt = &ddfil;
+		tracking_thr = std::thread(track_runnable, &trk_arg);
+	}
 
 	// =========================================
 	// Opencv Windows 
@@ -134,11 +243,6 @@ int main(int argc, char* argv[]) {
 
 
 	int InitializationCounter = 20;
-	int CameraStabCounter = 40;
-
-	std::cout << "Activating Flow Thread!" << std::endl;
-	if (playback)
-		trk.start_flow();
 
 	timespec t_now, t_old;
 	clock_gettime(CLOCK_MONOTONIC, &t_now);
@@ -159,16 +263,12 @@ int main(int argc, char* argv[]) {
 		mydev.synchronize();	
 		clock_gettime(CLOCK_MONOTONIC, &t_now);
 		dt = (timespec2micro(&t_now) - timespec2micro(&t_old)) / 1e6;
-		// Avoid too little 'dt'
-		if (dt < 0.0001)
-			dt = 0.001;
 		t_old = t_now;
 		
 		// Get the RGB image
 		mydev.get_rgb(cvRGB);
 
 		// Get the Depth information (measure + visualization map)
-		mydev.get_depth(cvDepth);
 		mydev.get_depth_col(cvDepthCol);
 
 		switch (key) {
@@ -186,48 +286,25 @@ int main(int argc, char* argv[]) {
 				break;
 		}	
 
-		if (CameraStabCounter > 0) {
-			CameraStabCounter--;
-		}
-
-		double depth_target = 0;
-
-		if (!cvFrame.empty() && !cvRGB.empty() && !cvDepth.empty()) {
+		if (!cvFrame.empty()) {
 			cv::Mat outputImage = cvFrame.clone();
 
-			if (playback && CameraStabCounter == 0) {
-				trk.step(cvRGB, cvDepth);
-
+			if (playback) {
 				cv::Point tg;
 				cv::Mat mask;
 				cv::Rect2d roi;
-				std::array<int, 3> v;
 				std::array<float, 3> pos;
 
 				trk.get_mask(0, mask);
 				trk.get_img_tg(0, tg);
-				trk.get_depthTG(0, v);
 				trk.get_ROI(0, roi);
 				trk.get_b_tg(0, pos);
 
 				if (!mask.empty())
 					cv::imshow("Mask", mask);
 
-				// Filter update
-				Eigen::Vector3d pos_;
-				pos_(0) = pos[0];
-				pos_(1) = pos[1];
-				pos_(2) = pos[2];
-
-				ddfil.prediction(dt);
-				ddfil.update(pos_);
-
 				Eigen::Vector3d est_p = ddfil.getPos();
 				Eigen::Vector3d est_v = ddfil.getVel();
-				
-				if (InitializationCounter == 0){
-					//trk.set_position(0, est_p);
-				}
 
 				if (InitializationCounter > 0) {
 					InitializationCounter--;
@@ -255,7 +332,7 @@ int main(int argc, char* argv[]) {
 				}
 
 				// Compute the position of the target w.r.t the World Frame
-				Eigen::Vector3d W_t = (aruco_map[1].q_CM_.inverse() * (pos_ - aruco_map[1].C_p_CM_));
+				Eigen::Vector3d W_t = (aruco_map[1].q_CM_.inverse() * (est_p - aruco_map[1].C_p_CM_));
 
 				outfile << timespec2micro(&t_now) << " ";
 				outfile << W_t(0) << " " << W_t(1) << " " << W_t(2) << " ";
@@ -291,7 +368,7 @@ int main(int argc, char* argv[]) {
 				cv::circle(outputImage, tg, 15, cv::Scalar(0, 255, 0), 2);
 				cv::rectangle(outputImage, roi, cv::Scalar(0, 0, 255), 2, 1);
 			}
-			//cout << " DT = " << dt << endl;
+			cout << "Main DT = " << dt << endl;
 			cv::imshow("Monitor", outputImage);
 			oWriter_rgb.write(outputImage);
 
@@ -310,10 +387,14 @@ int main(int argc, char* argv[]) {
 
 
 	}
+	shutting_down = true;
 	oWriter_rgb.release();
 	outfile.close();
 	cout << "Ending..." << endl;
-	trk.stop_flow();
+
+	if (tracking_thr.joinable())
+		tracking_thr.join();
+
 	mydev.stopDevice(true);
 
 	return 0;

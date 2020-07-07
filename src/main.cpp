@@ -31,7 +31,7 @@ std::thread tracking_thr;
 
 struct tracker_arg {
 	DeviceInterface* pdev;
-	Tracker* ptrk;
+	MMTracker* ptrk;
 	DDFilter* pfilt;
 }; 
 
@@ -49,7 +49,7 @@ void track_runnable(void* arg) {
 	tracker_arg* parg = static_cast<tracker_arg*>(arg);
 
 	DeviceInterface* pdev = parg->pdev;
-	Tracker* ptrk = parg->ptrk;
+	MMTracker* ptrk = parg->ptrk;
 	DDFilter* pfilt = parg->pfilt;
 	
 
@@ -74,7 +74,7 @@ void track_runnable(void* arg) {
 		dt = (timespec2micro(&t_now) - timespec2micro(&t_old)) / 1e6;
 		t_old = t_now;
 
-		cout << "Tracker DT = " << dt << endl;
+		//cout << "Tracker DT = " << dt << endl;
 
 		// Avoid too little 'dt'
 		if (dt < 0.0001)
@@ -215,7 +215,7 @@ int main(int argc, char* argv[]) {
 
 	// =========================================
 	// Tracker
-	Tracker trk;
+	MMTracker trk;
 	//trk.add_target(0, cv::Rect2d(1100, 450, 100, 100));
 	trk.setCamMatrix(intr, _DEPTH_SCALE);
 	tracker_arg trk_arg;
@@ -299,6 +299,7 @@ int main(int argc, char* argv[]) {
 				trk.get_img_tg(0, tg);
 				trk.get_ROI(0, roi);
 				trk.get_b_tg(0, pos);
+				Eigen::Vector3d pos_(pos[0], pos[1], pos[2]);
 
 				if (!mask.empty())
 					cv::imshow("Mask", mask);
@@ -332,7 +333,7 @@ int main(int argc, char* argv[]) {
 				}
 
 				// Compute the position of the target w.r.t the World Frame
-				Eigen::Vector3d W_t = (aruco_map[1].q_CM_.inverse() * (est_p - aruco_map[1].C_p_CM_));
+				Eigen::Vector3d W_t = (aruco_map[1].q_CM_.inverse() * (pos_ - aruco_map[1].C_p_CM_));
 
 				outfile << timespec2micro(&t_now) << " ";
 				outfile << W_t(0) << " " << W_t(1) << " " << W_t(2) << " ";
@@ -343,7 +344,6 @@ int main(int argc, char* argv[]) {
 				outfile << endl;
 
 
-				/*
 				cv::Mat fl_mask;
 				trk.get_flowmask(0, fl_mask);
 				if (!fl_mask.empty())
@@ -351,12 +351,13 @@ int main(int argc, char* argv[]) {
 
 				cv::Mat hist_img;
 				cv::Mat depth_roi;
+				std::array<int, 3> v;
 				trk.get_depthROI(0, depth_roi);
-				int numBins = 300;	
+				trk.get_depthTG(0, v);
+				int numBins = 200;	
 				trk.get_histogram(hist_img, numBins, depth_roi, v[2]);
 
 				cv::imshow("Hist", hist_img);
-				*/
 
 				// =====================================================
 				// Visualization =======================================
@@ -368,11 +369,11 @@ int main(int argc, char* argv[]) {
 				cv::circle(outputImage, tg, 15, cv::Scalar(0, 255, 0), 2);
 				cv::rectangle(outputImage, roi, cv::Scalar(0, 0, 255), 2, 1);
 			}
-			cout << "Main DT = " << dt << endl;
+			//cout << "Main DT = " << dt << endl;
 			cv::imshow("Monitor", outputImage);
 			oWriter_rgb.write(outputImage);
 
-			/*
+			
 			static bool initroi = true;
 			if (initroi) {
 				initroi = false;
@@ -382,7 +383,7 @@ int main(int argc, char* argv[]) {
 				mydev.playbackResume();
 				trk.add_target(0, roi);
 			}
-			*/
+			
 		}
 
 

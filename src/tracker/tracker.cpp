@@ -8,13 +8,15 @@
 #include "utils/timelib.hpp"
 
 
-Tracker::Tracker() {
+MMTracker::MMTracker() {
 	_MaxTargets = 3;
 
 	_delta_depth_param = 5.0;
 
+	opt_tracker = cv::TrackerCSRT::create();
+
 	_flow_thread_active = false;
-	 _flowActive = false;;
+	_flowActive = false;;
 
 	_min_flow_threshold = 0.6;
 	_min_flow_threshold_norm = 0.8;
@@ -30,7 +32,7 @@ Tracker::Tracker() {
 }
 
 
-Tracker::~Tracker() {
+MMTracker::~MMTracker() {
 	stop_flow();
 	_flow_thread_active = false;
 	if (_flow_thread.joinable()) {
@@ -47,49 +49,54 @@ Tracker::~Tracker() {
 }
 
 
-void Tracker::start_flow() {
+void MMTracker::start_flow() {
 	_flowActive = true;
 
 	if (_flow_thread_active)
 		return;
 
 	_flow_thread_active = true;
-	_flow_thread = std::thread(&Tracker::opticalflow_runnable, this);
+	_flow_thread = std::thread(&MMTracker::opticalflow_runnable, this);
 }
 
 
-void Tracker::stop_flow() {
+void MMTracker::stop_flow() {
 	_flowActive = false;
 }
 
 
-void Tracker::set_delta_depth_param(double d) {
+void MMTracker::set_delta_depth_param(double d) {
 	_delta_depth_param = d;
 }
 
-void Tracker::set_flow_thr(double thr, double norm_thr) {
+void MMTracker::set_flow_thr(double thr, double norm_thr) {
  	_min_flow_threshold = thr;
 	_min_flow_threshold_norm = norm_thr;
 }
 
 
-void Tracker::add_target(int id, cv::Rect2d roi) {
+void MMTracker::add_target(int id, cv::Rect2d roi) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "Adding new target: ID[" << id << "]" << std::endl;
 		TargetData* p_td = new TargetData();
+
 		p_td->roi = roi;
+		opt_tracker->init(cvFrame, roi);
+
 		std::cout << "ROI = " << roi << std::endl;
 		_targets.insert(std::pair<int, TargetData*>(id, p_td));
 	} else {
 		std::cout << "Updating target: ID[" << id << "]" << std::endl;
 		_targets[id]->roi = roi;
+		opt_tracker->init(cvFrame, roi);
+
 	}
 }
 
 
 
-void Tracker::set_roi(int id, int x, int y, int w, int h) {
+void MMTracker::set_roi(int id, int x, int y, int w, int h) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
@@ -100,7 +107,7 @@ void Tracker::set_roi(int id, int x, int y, int w, int h) {
 }
 
 
-void Tracker::set_position(int id, Eigen::Vector3d& pos) {
+void MMTracker::set_position(int id, Eigen::Vector3d& pos) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
@@ -128,7 +135,7 @@ void Tracker::set_position(int id, Eigen::Vector3d& pos) {
 }
 
 
-void Tracker::position2pixel(cv::Point& pt, const Eigen::Vector3d& pos) {
+void MMTracker::position2pixel(cv::Point& pt, const Eigen::Vector3d& pos) {
 	std::unique_lock<std::mutex> lk(_mx);
 	float b_target_[3] {};
 	for (int i = 0; i < 3; i++) {
@@ -143,13 +150,13 @@ void Tracker::position2pixel(cv::Point& pt, const Eigen::Vector3d& pos) {
 }
 
 
-void Tracker::setCamMatrix(rs2_intrinsics intr, double scale) {
+void MMTracker::setCamMatrix(rs2_intrinsics intr, double scale) {
 	_camera_intr = intr;
 	_dscale = scale;
 }
 
 
-void Tracker::step(cv::Mat& rgb, cv::Mat& depth) {
+void MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 	//XXX I should improve the way I protect the variables
 	std::unique_lock<std::mutex> lk(_mx);
 	int nclust = 4;
@@ -181,36 +188,69 @@ void Tracker::step(cv::Mat& rgb, cv::Mat& depth) {
 		// 2) I mask the pixel with a given distance from the camera to locate the 
 		// position of the target in the image;
 		// 3) I convert the pixel coordinates into real-world coordinates.
+		cv::Rect2d local_roi = tg_data->roi;
+		//bool ok = opt_tracker->update(cvFrame, local_roi);
 		find_target_in_roi(tg_data, nclust, attempts);
 
-		// Update the ROI
-		// Compute the pixel coordinates of the target in the full frame.
-		int img_x_global = tg_data->depth_tg[0] + tg_data->roi.tl().x;
-		int img_y_global = tg_data->depth_tg[1] + tg_data->roi.tl().y;
-		int img_x_std = tg_data->depth_tg_std[0];
-		int img_y_std = tg_data->depth_tg_std[1];	
+		int img_x_global = 0;
+		int img_y_global = 0;
 
-		tg_data->img_target.x = img_x_global;
-		tg_data->img_target.y = img_y_global;
+		cv::Mat indexes;
+		cv::findNonZero(tg_data->depth_mask, indexes);
 
+		int nrows = tg_data->depth_mask.rows;
+		int ncols = tg_data->depth_mask.cols;
+		bool notvalid = false; 
+		for (int k_ = 0; k_ < indexes.total(); k_++) {
+			cv::Point p = indexes.at<cv::Point>(k_);
+			if (p.x == 0 || p.x == (nrows - 1)) {
+				std::cout << "Cazzo X " << p << std::endl;
+				std::cout << tg_data->roi << std::endl;
+				notvalid = true;
+				break;
+			}
+			
+			if (p.y == 0 || p.y == (ncols - 1)) {
+				std::cout << "Cazzo Y " << p << std::endl;
+				std::cout << tg_data->roi << std::endl;
+				notvalid = true;
+				break;
+			}
+		}
 
-		// The std of the target area is used to update the height and
-		// width. 
-		// The ROI is moved in the center of the target.
-		tg_data->roi.height = std::min(100, std::max(5 * img_x_std, 100));
-		tg_data->roi.width = std::min(100, std::max(5 * img_y_std, 100));
+		// Update the ROI (If the detection area makes sense)	
+		if ((tg_data->depth_mask_moments.m00 < (tg_data->roi.area() / 3) && !notvalid)) {
 
-		int base_x = img_x_global - (tg_data->roi.height / 2.0);
-		int base_y = img_y_global - (tg_data->roi.width / 2.0);
+			// Compute the pixel coordinates of the target in the full frame.
+			img_x_global = tg_data->depth_tg[0] + tg_data->roi.tl().x;
+			img_y_global = tg_data->depth_tg[1] + tg_data->roi.tl().y;
+			int img_x_std = tg_data->depth_tg_std[0];
+			int img_y_std = tg_data->depth_tg_std[1];	
 
-		tg_data->roi.x = std::max(0,
-				std::min(base_x, cvFrame.cols - (int)tg_data->roi.height)
-				);
+			tg_data->img_target.x = img_x_global;
+			tg_data->img_target.y = img_y_global;
 
-		tg_data->roi.y = std::max(0,
-				std::min(base_y, cvFrame.rows - (int)tg_data->roi.width)
-				);
+			// The std of the target area is used to update the height and
+			// width. 
+			// The ROI is moved in the center of the target.
+			tg_data->roi.height = std::min(100, std::max(5 * img_x_std, 100));
+			tg_data->roi.width = std::min(150, std::max(5 * img_y_std, 150));
 
+			int base_x = img_x_global - (tg_data->roi.width / 2.0);
+			int base_y = img_y_global - (tg_data->roi.height / 2.0);
+
+			tg_data->roi.x = std::max(0,
+					std::min(base_x, cvFrame.cols - (int)tg_data->roi.width)
+					);
+
+			tg_data->roi.y = std::max(0,
+					std::min(base_y, cvFrame.rows - (int)tg_data->roi.height)
+					);
+		} else {
+			img_x_global = local_roi.tl().x + local_roi.width;
+			img_y_global = local_roi.tl().y + local_roi.height;
+			tg_data->roi = local_roi;
+		}
 
 		// Get the target position with respect to the camera frame
 		float b_target_[3] {};
@@ -230,7 +270,7 @@ void Tracker::step(cv::Mat& rgb, cv::Mat& depth) {
 }
 
 
-void Tracker::get_rgbROI(int id, cv::Mat& roi) {
+void MMTracker::get_rgbROI(int id, cv::Mat& roi) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
@@ -240,7 +280,7 @@ void Tracker::get_rgbROI(int id, cv::Mat& roi) {
 	}
 }
 
-void Tracker::get_ROI(int id, cv::Rect2d& roi) {
+void MMTracker::get_ROI(int id, cv::Rect2d& roi) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
@@ -250,7 +290,7 @@ void Tracker::get_ROI(int id, cv::Rect2d& roi) {
 	}
 }
 
-void Tracker::get_flowmask(int id, cv::Mat& m) {
+void MMTracker::get_flowmask(int id, cv::Mat& m) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
@@ -261,7 +301,7 @@ void Tracker::get_flowmask(int id, cv::Mat& m) {
 	}
 }
 
-void Tracker::get_img_tg(int id, cv::Point& tg) {
+void MMTracker::get_img_tg(int id, cv::Point& tg) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
@@ -271,7 +311,7 @@ void Tracker::get_img_tg(int id, cv::Point& tg) {
 	}
 }
 
-void Tracker::get_b_tg(int id, std::array<float, 3>& tg) {
+void MMTracker::get_b_tg(int id, std::array<float, 3>& tg) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
@@ -281,7 +321,7 @@ void Tracker::get_b_tg(int id, std::array<float, 3>& tg) {
 	}
 }
 
-void Tracker::get_mask(int id, cv::Mat& m) {
+void MMTracker::get_mask(int id, cv::Mat& m) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
@@ -291,7 +331,7 @@ void Tracker::get_mask(int id, cv::Mat& m) {
 	}
 }
 
-void Tracker::get_depthROI(int id, cv::Mat& m) {
+void MMTracker::get_depthROI(int id, cv::Mat& m) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
@@ -301,7 +341,7 @@ void Tracker::get_depthROI(int id, cv::Mat& m) {
 	}
 }
 
-void Tracker::get_depthTG(int id, std::array<int, 3>& tg) {
+void MMTracker::get_depthTG(int id, std::array<int, 3>& tg) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
@@ -315,7 +355,8 @@ void Tracker::get_depthTG(int id, std::array<int, 3>& tg) {
 // ============================================================
 // ============================================================
 
-void Tracker::find_target_in_roi(TargetData* tg_data, int ks, int attempts) {
+void MMTracker::find_target_in_roi(
+		TargetData* tg_data, int ks, int attempts) {
 	double tg_dist;
 	double tg_dist_std;
 
@@ -323,9 +364,10 @@ void Tracker::find_target_in_roi(TargetData* tg_data, int ks, int attempts) {
 	tg_data->depth_roi.convertTo(depth_roi_32f, CV_32F);
 
 	// Compute the depth cluster of the target.
-	double compactness = computeKmeans(&tg_dist, &tg_dist_std,
-			depth_roi_32f, ks, attempts, 0.1);
+	int numK = find_target_depth(&tg_dist, &tg_dist_std,
+			depth_roi_32f, attempts, 0.1);
 
+	//std::cout << numK << std::endl;
 
 	// Select the part of the image which as a measured distance, 
 	// near the one estimated from the target.
@@ -342,8 +384,7 @@ void Tracker::find_target_in_roi(TargetData* tg_data, int ks, int attempts) {
 			cv::THRESH_BINARY);
 
 	cv::bitwise_and(thr1, thr2, mask);
-
-
+	
 	// The threshold is a image with 1.0 in the selected region,
 	// compute the center of mass of the selected region.
 	mask.copyTo(tg_data->depth_mask);
@@ -357,18 +398,19 @@ void Tracker::find_target_in_roi(TargetData* tg_data, int ks, int attempts) {
 	tg_data->depth_tg_std[0] = (int)std::sqrt(Mm.mu20 / Mm.m00);
 	tg_data->depth_tg_std[1] = (int)std::sqrt(Mm.mu02 / Mm.m00);
 	tg_data->depth_tg_std[2] = (int)tg_dist_std;
-
 }
 
 
-double Tracker::computeKmeans(
+int MMTracker::find_target_depth(
 		double* tg_distance, double* tg_distance_std,
-		const cv::Mat& depth, int ks, int attempts, double err) {
+		const cv::Mat& depth, int attempts, double err) {
 	cv::Mat labels;
-	cv::Mat centers;
+	cv::Mat distances;
 
 	int nrow = depth.rows;
 	int ncol = depth.cols;
+
+	int MaxK = 8;
 	
 	// Convert the depth cv::Mat into a vector form 
 	cv::Mat tg_v;
@@ -383,19 +425,44 @@ double Tracker::computeKmeans(
 	}
 
 	// Run the KMean algorithm on the reshaped depth cv::Mat
-	// to find 'ks' clusters and respective centers
-	double compactness = cv::kmeans(tg_v_nz, ks, labels,
-			cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 20, err), attempts,
-			cv::KMEANS_PP_CENTERS, centers);
+	// to find 'ks' clusters and respective distances
+	int ks = 1;
+	double cmp = cv::kmeans(tg_v_nz, ks, labels,
+			cv::TermCriteria(cv::TermCriteria::EPS +
+				cv::TermCriteria::COUNT, 20, err),
+			attempts, cv::KMEANS_PP_CENTERS, distances);
 
+	while (ks < MaxK) {
+		ks++;
+		cv::Mat local_labels = labels;
+		cv::Mat local_distances = distances;
+		double local_cmp;
+
+		local_cmp = cv::kmeans(tg_v_nz, ks, local_labels,
+				cv::TermCriteria(cv::TermCriteria::EPS +
+					cv::TermCriteria::COUNT, 10, err),
+				attempts, cv::KMEANS_USE_INITIAL_LABELS,
+				local_distances);
+
+		double improv_ratio = (cmp - local_cmp)/cmp;
+		if (improv_ratio < 0.3) {
+			break;
+		} else {
+			labels = local_labels;
+			distances = local_distances;
+			cmp = local_cmp;
+		}
+	}
+	
+	// Order the clusters in ascending order.
 	cv::Mat indexes;
-	cv::sortIdx(centers, indexes,
+	cv::sortIdx(distances, indexes,
 			cv::SORT_EVERY_COLUMN + cv::SORT_ASCENDING);
 
-	// Create a mask to select the element of the different clusters.
+	// Create a mask to select the element of the nearest clusters.
 	int min_loc = indexes.at<int>(0);
 	cv::Mat mask = (labels == min_loc);
-	float min = centers.at<float>(min_loc);
+	float min = distances.at<float>(min_loc);
 
 	// Compute Mean and Std of the clusters.
 	std::vector<double> avg;
@@ -405,11 +472,11 @@ double Tracker::computeKmeans(
 	*tg_distance = min;
 	*tg_distance_std = std[0];
 
-	return compactness;
+	return ks;
 }
 
 
-void Tracker::opticalflow_runnable() {
+void MMTracker::opticalflow_runnable() {
 	double pyr_scale = 0.5;
 	int levels = 2;
 	int winsize = 20;
@@ -533,9 +600,9 @@ void Tracker::opticalflow_runnable() {
 							//std::cout << "[" << i << "] " <<
 							//	"Flow Sum = " << area << std::endl;
 							
-							//std::cout << "New target " <<
-							//	"@ x = " << p.x << " y = " << p.y <<
-							//	std::endl;
+							std::cout << "New target " <<
+								"@ x = " << p.x << " y = " << p.y <<
+								std::endl;
 	
 							int base_x = p.x - 80;
 							int base_y = p.y - 80;
@@ -581,7 +648,7 @@ void Tracker::opticalflow_runnable() {
 	std::cout << "Terminating FlowThread!" << std::endl;
 }
 
-void Tracker::computeHist(cv::Mat& hist, int numBins,
+void MMTracker::computeHist(cv::Mat& hist, int numBins,
 		const cv::Mat& data, double scale) {
 	int nimages = 1;
 	float min_val = 0;
@@ -603,7 +670,7 @@ void Tracker::computeHist(cv::Mat& hist, int numBins,
 	cv::calcHist(&data_32f, nimages, 0, mask, hist, 1, &numBins, &histRange, true, false);
 }
 
-void Tracker::get_histogram(cv::Mat& hist_img, int numBins,
+void MMTracker::get_histogram(cv::Mat& hist_img, int numBins,
 		const cv::Mat& depth_roi, int target_depth) {
 
 	cv::Mat t_hist;

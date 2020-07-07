@@ -18,6 +18,9 @@
 #include <librealsense2/rsutil.h> 
 #include <Eigen/Dense>
 #include <opencv2/core.hpp>
+#include <opencv2/tracking/tracker.hpp>
+//#include <opencv2/tracking.hpp>
+
 
 #include <unordered_map>
 #include <thread>
@@ -86,10 +89,10 @@ struct TargetData {
 };
 
 
-class Tracker {
+class MMTracker {
 	public:
-		Tracker();
-		~Tracker();
+		MMTracker();
+		~MMTracker();
 
 		void add_target(int id, cv::Rect2d roi);
 
@@ -137,6 +140,9 @@ class Tracker {
 				const cv::Mat& depth_roi, int target_depth);
 
 	private:
+
+		cv::Ptr<cv::Tracker> opt_tracker;
+
 		/**
 		 * Max number of targets for the optical flow analysis.
 		 */
@@ -198,9 +204,8 @@ class Tracker {
 		/**
 		 * K-means
 		 */
-		double computeKmeans(double* tg, double* tg_std,
-				const cv::Mat& depth,
-				int ks, int attempts, double err);
+		int find_target_depth(double* tg, double* tg_std,
+				const cv::Mat& depth, int attempts, double err);
 
 		void find_target_in_roi(TargetData* tg_data,
 				int ks, int attempts);

@@ -231,10 +231,10 @@ void DeviceInterface::filtering() {
 	rs2::disparity_transform disparity2depth(false);
 
 	rs2::spatial_filter spat;
-	spat.set_option(RS2_OPTION_HOLES_FILL, 1);
+	spat.set_option(RS2_OPTION_HOLES_FILL, 2);
 	spat.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.5);
 
-	rs2::temporal_filter temp(0.4, 20, 7);
+	rs2::temporal_filter temp(0.4, 20, 2);
 	temp.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.8);
 	temp.set_option(RS2_OPTION_FILTER_SMOOTH_DELTA, 20);
 
@@ -280,12 +280,23 @@ void DeviceInterface::filtering() {
 			rgb_rs = fs_filt.get_color_frame();
 			depth_rs = fs_filt.get_depth_frame();
 
+			timespec t1, t2;
+			clock_gettime(CLOCK_MONOTONIC, &t1);
 			frame2Mat(rgb_cv, rgb_rs, CV_8UC3, 1); 
-			frame2Mat(depth_cv, depth_rs, CV_16UC1, 0);
-			frame2Mat(depthc_cv, depth_rs.apply_filter(color_map), CV_8UC3, 1);
+			frame2Mat(depth_cv, depth_rs, CV_16UC1, 0);		
 			data.set_rgb(rgb_cv);
 			data.set_depth(depth_cv);
-			data.set_depth_col(depthc_cv);
+
+			// The conversion of the depth into colored image takes 
+			// between 5 to 10 ms!
+			//
+			//frame2Mat(depthc_cv, depth_rs.apply_filter(color_map),
+			//		CV_8UC3, 1);
+			//data.set_depth_col(depthc_cv);
+			clock_gettime(CLOCK_MONOTONIC, &t2);
+
+			dt = (timespec2micro(&t2) - timespec2micro(&t1)) / 1e6;
+			//std::cout << "Conversion = " << dt << std::endl;
 		} else {
 			std::cout << "Filtering thread: Timeout! " << std::endl;
 		}

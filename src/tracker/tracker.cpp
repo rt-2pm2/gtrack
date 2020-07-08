@@ -69,11 +69,21 @@ void MMTracker::set_delta_depth_param(double d) {
 	_delta_depth_param = d;
 }
 
+
+void MMTracker::set_transform(const Eigen::Vector3d& t, const Eigen::Quaterniond& q) {
+	C_p_CM_ = t;
+	q_CM_ = q;
+}
+
 void MMTracker::set_flow_thr(double thr, double norm_thr) {
  	_min_flow_threshold = thr;
 	_min_flow_threshold_norm = norm_thr;
 }
 
+
+void MMTracker::addWorldMap(SharedMap* sm) {
+	_wm = sm;
+}
 
 void MMTracker::add_target(int id, cv::Rect2d roi) {
 	std::unique_lock<std::mutex> lk(_mx);
@@ -164,6 +174,7 @@ void MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 
 	// Copy the RGB frame to the internal variable
 	rgb.copyTo(cvFrame);
+	depth.copyTo(cvDepth);
 
 	// For each ROI perform the localization of the 
 	// target. The idea is that the ROIs are added 
@@ -203,24 +214,23 @@ void MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 		bool notvalid = false; 
 		for (int k_ = 0; k_ < indexes.total(); k_++) {
 			cv::Point p = indexes.at<cv::Point>(k_);
-			if (p.x == 0 || p.x == (nrows - 1)) {
-				std::cout << "Cazzo X " << p << std::endl;
-				std::cout << tg_data->roi << std::endl;
+			if (p.x == 0 || p.x == (ncols - 1)) {
+				//std::cout << "Cazzo X " << p << std::endl;
+				//std::cout << tg_data->roi << std::endl;
 				notvalid = true;
 				break;
 			}
 			
-			if (p.y == 0 || p.y == (ncols - 1)) {
-				std::cout << "Cazzo Y " << p << std::endl;
-				std::cout << tg_data->roi << std::endl;
+			if (p.y == 0 || p.y == (nrows - 1)) {
+				//std::cout << "Cazzo Y " << p << std::endl;
+				//std::cout << tg_data->roi << std::endl;
 				notvalid = true;
 				break;
 			}
 		}
 
 		// Update the ROI (If the detection area makes sense)	
-		if ((tg_data->depth_mask_moments.m00 < (tg_data->roi.area() / 3) && !notvalid)) {
-
+		if (!notvalid) {
 			// Compute the pixel coordinates of the target in the full frame.
 			img_x_global = tg_data->depth_tg[0] + tg_data->roi.tl().x;
 			img_y_global = tg_data->depth_tg[1] + tg_data->roi.tl().y;
@@ -247,6 +257,7 @@ void MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 					std::min(base_y, cvFrame.rows - (int)tg_data->roi.height)
 					);
 		} else {
+			std::cout << "Depth not valid" << std::endl;
 			img_x_global = local_roi.tl().x + local_roi.width;
 			img_y_global = local_roi.tl().y + local_roi.height;
 			tg_data->roi = local_roi;
@@ -297,7 +308,7 @@ void MMTracker::get_flowmask(int id, cv::Mat& m) {
 		return;
 	} else {
 		//_targets[id]->flow_mask.copyTo(m);
-		_tg_data.flow_mask.copyTo(m);
+		_flow_mask.copyTo(m);
 	}
 }
 
@@ -355,6 +366,7 @@ void MMTracker::get_depthTG(int id, std::array<int, 3>& tg) {
 // ============================================================
 // ============================================================
 
+
 void MMTracker::find_target_in_roi(
 		TargetData* tg_data, int ks, int attempts) {
 	double tg_dist;
@@ -366,8 +378,6 @@ void MMTracker::find_target_in_roi(
 	// Compute the depth cluster of the target.
 	int numK = find_target_depth(&tg_dist, &tg_dist_std,
 			depth_roi_32f, attempts, 0.1);
-
-	//std::cout << numK << std::endl;
 
 	// Select the part of the image which as a measured distance, 
 	// near the one estimated from the target.
@@ -398,6 +408,63 @@ void MMTracker::find_target_in_roi(
 	tg_data->depth_tg_std[0] = (int)std::sqrt(Mm.mu20 / Mm.m00);
 	tg_data->depth_tg_std[1] = (int)std::sqrt(Mm.mu02 / Mm.m00);
 	tg_data->depth_tg_std[2] = (int)tg_dist_std;
+}
+
+
+
+
+
+void MMTracker::find_target_in_roi(
+		Eigen::Vector3d& b_tg,
+		const cv::Rect2d& roi) {
+	double tg_dist;
+	double tg_dist_std;
+
+	cv::Mat depth_roi(cvDepth, roi);
+	cv::Mat depth_roi_32f;
+	depth_roi.convertTo(depth_roi_32f, CV_32F);
+
+	// Compute the depth cluster of the target.
+	int numK = find_target_depth(&tg_dist, &tg_dist_std,
+			depth_roi_32f, 2, 0.1);
+
+	// Select the part of the image which as a measured distance, 
+	// near the one estimated from the target.
+	cv::Mat thr1, thr2;
+	cv::Mat mask;
+
+	double Delta = _delta_depth_param * tg_dist_std;
+
+	// X  < tg_dist + Delta 
+	cv::threshold(depth_roi_32f, thr1, tg_dist + Delta, 1.0,
+			cv::THRESH_BINARY_INV);
+	// X > tg_dist - Delta	
+	cv::threshold(depth_roi_32f, thr2, tg_dist - Delta, 1.0,
+			cv::THRESH_BINARY);
+
+	cv::bitwise_and(thr1, thr2, mask);
+	
+	// The threshold is a image with 1.0 in the selected region,
+	// compute the center of mass of the selected region.
+	cv::Moments Mm = cv::moments(mask);
+	
+	float b_tg_pix[3] {};
+	b_tg_pix[0] = (int)(Mm.m10 / Mm.m00);
+	b_tg_pix[1] = (int)(Mm.m01 / Mm.m00);
+	b_tg_pix[2] = (int)tg_dist;
+
+	float upixel[2] {
+		(float)b_tg_pix[0] + roi.tl().x,
+		(float)b_tg_pix[1] + roi.tl().y
+	};
+
+	float b_target_[3];
+	rs2_deproject_pixel_to_point(b_target_, &_camera_intr,
+				upixel, b_tg_pix[2] * _dscale);
+
+	for (int i = 0; i < 3; i++) {
+		b_tg(i) = b_target_[i];
+	}
 }
 
 
@@ -558,7 +625,7 @@ void MMTracker::opticalflow_runnable() {
 			cv::findNonZero(flow_mask, nonzero_pix); 
 			nonzero_pix.convertTo(nonzero_pix, CV_32FC2, 1, 0);
 
-			_tg_data.flow_mask = flow_mask;
+			_flow_mask = flow_mask;
 
 			int Npix = nonzero_pix.total();
 			_log_flow << timespec2micro(&temp) << " " << min <<
@@ -586,37 +653,55 @@ void MMTracker::opticalflow_runnable() {
 					double area = cv::sum(mask)[0];	
 
 					if (area > _opt_flow_detect_thr) {	
-						bool newpoint = true;
+						bool newroi = true;
 						cv::Point p(centers.row(i));
 						//std::cout << "Point = " << p << std::endl;
 
 						for (auto el : _targets) {
 							//std::cout << el.second->roi << std::endl;
 							if (el.second->roi.contains(p)) {
-								newpoint = false;	
+								//std::cout << "Already tracked" << std::endl;
+								newroi = false;	
 							}	
 						}
-						if (newpoint) {
-							//std::cout << "[" << i << "] " <<
-							//	"Flow Sum = " << area << std::endl;
-							
-							std::cout << "New target " <<
-								"@ x = " << p.x << " y = " << p.y <<
-								std::endl;
-	
-							int base_x = p.x - 80;
-							int base_y = p.y - 80;
+
+						if (newroi) {
+							// Define a ROI in the area of the movement
+							int base_x = p.x - 70;
+							int base_y = p.y - 70;
 
 							int roix = std::max(0,
-									std::min(base_x, _frame_width - 160)
+									std::min(base_x, _frame_width - 140)
 									);
-
 							int roiy = std::max(0,
-									std::min(base_y, _frame_height - 160)
+									std::min(base_y, _frame_height - 140)
 									);
 
-							cv::Rect2d tgroi(roix, roiy, 160, 160);	
-							add_target(0, tgroi);
+							cv::Rect2d tgroi(roix, roiy, 140, 140);
+							Eigen::Vector3d pos_;
+
+							// Try to identify a target postion in the ROI
+							find_target_in_roi(pos_, tgroi);
+
+							// Compute the Word Frame position of the identified point.
+							Eigen::Vector3d W_t = (q_CM_.inverse() * (pos_ - C_p_CM_));
+
+							// Check in the global map if there is something there
+							for (auto el : _wm->getMap()) {
+								double dist = (el.second->tg - W_t).norm();
+								if (dist < 0.5) {
+									std::cout << "Locking target " <<
+										"@ x = " << p.x << " y = " << p.y <<
+										std::endl;
+									add_target(el.first, tgroi);
+									break;
+								} else {
+									std::cout << "False Positive" << std::endl;
+									std::cout << el.second->tg << std::endl;
+									std::cout << W_t << std::endl;
+								}
+							}
+							
 						}
 					}
 				}

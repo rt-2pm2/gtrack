@@ -14,6 +14,7 @@
 #include "tracker/tracker.hpp"
 #include "filter/ddfilter.hpp"
 #include "utils/timelib.hpp"
+#include "utils/shared_map.hpp"
 
 #define ARUCO_DEBUG
 
@@ -33,6 +34,7 @@ struct tracker_arg {
 	DeviceInterface* pdev;
 	MMTracker* ptrk;
 	DDFilter* pfilt;
+	SharedMap* pwmap;
 }; 
 
 bool file_exist(std::string filename) {
@@ -51,6 +53,7 @@ void track_runnable(void* arg) {
 	DeviceInterface* pdev = parg->pdev;
 	MMTracker* ptrk = parg->ptrk;
 	DDFilter* pfilt = parg->pfilt;
+	SharedMap* pwmap = parg->pwmap;
 	
 
 	double dt = 0.03;
@@ -80,7 +83,7 @@ void track_runnable(void* arg) {
 		if (dt < 0.0001)
 			dt = 0.001;
 
-		pfilt->prediction(dt);
+		//pfilt->prediction(dt);
 
 		// Get the RGB image
 		pdev->get_rgb(cvRGB);
@@ -99,7 +102,7 @@ void track_runnable(void* arg) {
 
 				ptrk->get_b_tg(0, pos);
 				Eigen::Vector3d pos_(pos[0], pos[1], pos[2]);
-				pfilt->update(pos_);
+				//pfilt->update(pos_);
 			}
 		}
 	}
@@ -117,6 +120,8 @@ int main(int argc, char* argv[]) {
 
 	bool playback = true;
 	int option;
+
+	SharedMap wmap;
 
 	while ((option = getopt(argc, argv, ":p:f:")) != -1) {
 		switch (option) {
@@ -173,6 +178,8 @@ int main(int argc, char* argv[]) {
 		cout << "No config, using default." << endl;
 	}
 
+	wmap.add_target_data(0, Eigen::Vector3d(-0.9, 0, 0.1));
+
 	// =========================================
 	// Realsense Device	
 	//
@@ -204,13 +211,13 @@ int main(int argc, char* argv[]) {
 	// =========================================
 	// Aruco Detector
 	// Import the camera intrisic from the realsense
-	ArucoDetector aruco_detector(cmat, ddsf, 0.10, 0);
+	ArucoDetector aruco_detector(cmat, ddsf, 0.14, 0);
 
 	
 	// =========================================
 	// Filter
 	//
-	DDFilter ddfil(Eigen::Vector3d::Zero(), 20, 0.03);
+	DDFilter ddfil(Eigen::Vector3d::Zero(), 5, 0.03);
 
 
 	// =========================================
@@ -218,18 +225,20 @@ int main(int argc, char* argv[]) {
 	MMTracker trk;
 	//trk.add_target(0, cv::Rect2d(1100, 450, 100, 100));
 	trk.setCamMatrix(intr, _DEPTH_SCALE);
+	trk.addWorldMap(&wmap);
 	tracker_arg trk_arg;
 	
 	if (playback) {
 		trk_arg.pdev = &mydev;
 		trk_arg.ptrk = &trk;
 		trk_arg.pfilt = &ddfil;
-		tracking_thr = std::thread(track_runnable, &trk_arg);
+		trk_arg.pwmap = &wmap;
+		//tracking_thr = std::thread(track_runnable, &trk_arg);
 	}
 
 	// =========================================
 	// Opencv Windows 
-	cv::namedWindow("Monitor", cv::WINDOW_AUTOSIZE);
+	cv::namedWindow("Monitor", cv::WINDOW_AUTOSIZE + cv::WINDOW_OPENGL);
 	cv::moveWindow("Monitor", 0, 0);
 
 	cv::namedWindow("Mask", cv::WINDOW_AUTOSIZE);
@@ -242,7 +251,8 @@ int main(int argc, char* argv[]) {
 	cv::moveWindow("Flow", 1280, 800);
 
 
-	int InitializationCounter = 20;
+	int InitCounter = 20;
+	bool TrkRunning = false;
 
 	timespec t_now, t_old;
 	clock_gettime(CLOCK_MONOTONIC, &t_now);
@@ -307,8 +317,8 @@ int main(int argc, char* argv[]) {
 				Eigen::Vector3d est_p = ddfil.getPos();
 				Eigen::Vector3d est_v = ddfil.getVel();
 
-				if (InitializationCounter > 0) {
-					InitializationCounter--;
+				if (InitCounter > 0) {
+					InitCounter--;
 
 					int Ndetected = 0;
 					DetectionData detect_data;
@@ -330,6 +340,13 @@ int main(int argc, char* argv[]) {
 								0.1);
 					}
 #endif
+				}
+
+				if (InitCounter == 0 && TrkRunning == false && playback) {
+					trk.set_transform(aruco_map[1].C_p_CM_,
+							aruco_map[1].q_CM_);
+					tracking_thr = std::thread(track_runnable, &trk_arg);
+					TrkRunning = true;
 				}
 
 				// Compute the position of the target w.r.t the World Frame
@@ -373,7 +390,7 @@ int main(int argc, char* argv[]) {
 			cv::imshow("Monitor", outputImage);
 			oWriter_rgb.write(outputImage);
 
-			
+		/*	
 			static bool initroi = true;
 			if (initroi) {
 				initroi = false;
@@ -383,7 +400,7 @@ int main(int argc, char* argv[]) {
 				mydev.playbackResume();
 				trk.add_target(0, roi);
 			}
-			
+		*/	
 		}
 
 

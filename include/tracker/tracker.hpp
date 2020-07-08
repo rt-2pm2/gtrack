@@ -19,13 +19,13 @@
 #include <Eigen/Dense>
 #include <opencv2/core.hpp>
 #include <opencv2/tracking/tracker.hpp>
-//#include <opencv2/tracking.hpp>
-
 
 #include <unordered_map>
 #include <thread>
 #include <mutex>
 #include <fstream>
+
+#include "utils/shared_map.hpp"
 
 
 struct TargetData {
@@ -69,13 +69,6 @@ struct TargetData {
 	cv::Rect2d roi;
 
 	/**
-	 * Optical Flow mask selecting the part of
-	 * the image where the target generates
-	 * optical flow.
-	 */
-	cv::Mat flow_mask;
-
-	/**
 	 * Part of the image RGB containing the 
 	 * target.
 	 */
@@ -93,6 +86,11 @@ class MMTracker {
 	public:
 		MMTracker();
 		~MMTracker();
+
+		void addWorldMap(SharedMap* sm);
+
+		void set_transform(const Eigen::Vector3d& t,
+				const Eigen::Quaterniond& q);
 
 		void add_target(int id, cv::Rect2d roi);
 
@@ -141,6 +139,22 @@ class MMTracker {
 
 	private:
 
+		/**
+		 * Transformation world to camera
+		 */
+		Eigen::Vector3d C_p_CM_;
+		Eigen::Quaterniond q_CM_;
+
+		/**
+		 * Pointer to a class SharedMap which contains the 
+		 * shared information regarding the 'world frame'
+		 */
+		SharedMap* _wm;
+
+
+		/**
+		 * Opencv Tracker class
+		 */
 		cv::Ptr<cv::Tracker> opt_tracker;
 
 		/**
@@ -164,6 +178,11 @@ class MMTracker {
 		 * RGB Image
 		 */
 		cv::Mat cvFrame;
+		
+		/**
+		 * Depth Image
+		 */
+		cv::Mat cvDepth;
 
 		int _frame_height;
 		int _frame_width;
@@ -173,22 +192,11 @@ class MMTracker {
 		 */
 		std::unordered_map<int, TargetData*> _targets;
 
-		/** 
-		 * Estimated position of the target in the image
-		 * coordinate frame (pixels)
-		 */
-		cv::Point _img_target;
-
-		/**
-		 * Coordinate of the target in body frame (camera frame)
-		 */
-		std::array<float, 3> _b_target;
-
 		/**
 		 * Region Of Interest reprensenting the area of the image
 		 * where the target is supposed to be.
 		 */
-		TargetData _tg_data;
+		cv::Mat _flow_mask;
 
 		/**
 		 * Intrinsic paramter of the camera necessary to convert
@@ -209,6 +217,10 @@ class MMTracker {
 
 		void find_target_in_roi(TargetData* tg_data,
 				int ks, int attempts);
+
+		void find_target_in_roi(Eigen::Vector3d& b_tg,
+				const cv::Rect2d& roi);
+
 
 		/**
 		 * Delta Depth used to select the pixel 

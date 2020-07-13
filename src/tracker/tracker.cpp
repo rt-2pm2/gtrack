@@ -24,7 +24,7 @@ MMTracker::MMTracker() {
 	_opt_flow_scale = 0.5;
 	_opt_flow_detect_thr = 200.0;
 
-	opt_flow_period.tv_nsec = 200 * 1e6; // ms
+	opt_flow_period.tv_nsec = 500 * 1e6; // ms
 	opt_flow_period.tv_sec = 0;
 
 	_log_flow.open("trk_flow_log.csv");
@@ -100,7 +100,6 @@ void MMTracker::add_target(int id, cv::Rect2d roi) {
 		std::cout << "Updating target: ID[" << id << "]" << std::endl;
 		_targets[id]->roi = roi;
 		opt_tracker->init(cvFrame, roi);
-
 	}
 }
 
@@ -184,13 +183,20 @@ void MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 	timespec t;
 	clock_gettime(CLOCK_MONOTONIC, &t);
 	uint64_t t_micro = timespec2micro(&t);
-	for (auto el : _targets) {
-		TargetData* tg_data = el.second;
+
+	auto el_it = _targets.begin();
+	while (el_it !=  _targets.end()) {
+		TargetData* tg_data = el_it->second;
+		cv::Rect2d roi = tg_data->roi;
+
+		if (roi.empty()) {
+			continue;
+		}
 
 		// Extract the ROI region from the RGB image.
-		tg_data->rgb_roi = cv::Mat(cvFrame, tg_data->roi);
+		tg_data->rgb_roi = cv::Mat(cvFrame, roi);
 		// Extract the ROI region from the Depth image.
-		tg_data->depth_roi = cv::Mat(depth, tg_data->roi);
+		tg_data->depth_roi = cv::Mat(depth, roi);
 
 		// Localization step.
 		// This is the core of the localization.
@@ -256,109 +262,123 @@ void MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 			tg_data->roi.y = std::max(0,
 					std::min(base_y, cvFrame.rows - (int)tg_data->roi.height)
 					);
+
+			// Get the target position with respect to the camera frame
+			float b_target_[3] {};
+			float upixel[2] {(float)img_x_global, (float)img_y_global};
+
+			rs2_deproject_pixel_to_point(b_target_, &_camera_intr,
+					upixel, tg_data->depth_tg[2] * _dscale);
+
+			for (int i = 0; i < 3; i++) {
+				tg_data->b_tg[i] = b_target_[i];
+			}
+
+			_log_trk << t_micro << " " << el_it->first << " " <<
+				b_target_[0] << " " << b_target_[1] << " " <<
+				b_target_[2] << std::endl;
+			el_it++;
 		} else {
 			std::cout << "Depth not valid" << std::endl;
-			img_x_global = local_roi.tl().x + local_roi.width;
-			img_y_global = local_roi.tl().y + local_roi.height;
-			tg_data->roi = local_roi;
+			
+			/*
+			   img_x_global = local_roi.tl().x + local_roi.width;
+			   img_y_global = local_roi.tl().y + local_roi.height;
+			   tg_data->roi = local_roi;
+			*/	
+			el_it = _targets.erase(el_it);
 		}
-
-		// Get the target position with respect to the camera frame
-		float b_target_[3] {};
-		float upixel[2] {(float)img_x_global, (float)img_y_global};
-
-		rs2_deproject_pixel_to_point(b_target_, &_camera_intr,
-				upixel, tg_data->depth_tg[2] * _dscale);
-
-		for (int i = 0; i < 3; i++) {
-			tg_data->b_tg[i] = b_target_[i];
-		}
-
-		_log_trk << t_micro << " " << el.first << " " <<
-			b_target_[0] << " " << b_target_[1] << " " << b_target_[2] <<
-			std::endl;
 	}
 }
 
 
-void MMTracker::get_rgbROI(int id, cv::Mat& roi) {
+bool MMTracker::get_rgbROI(int id, cv::Mat& roi) {
+	bool out = false;
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
-		return;
+		return false;
 	} else {
 		_targets[id]->rgb_roi.copyTo(roi);
+		return true;
 	}
 }
 
-void MMTracker::get_ROI(int id, cv::Rect2d& roi) {
+bool MMTracker::get_ROI(int id, cv::Rect2d& roi) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
-		return;
+		return false;
 	} else {
 		roi = _targets[id]->roi;
+		return true;
 	}
 }
 
-void MMTracker::get_flowmask(int id, cv::Mat& m) {
+bool MMTracker::get_flowmask(int id, cv::Mat& m) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
-		return;
+		return false;
 	} else {
 		//_targets[id]->flow_mask.copyTo(m);
 		_flow_mask.copyTo(m);
+		return true;
 	}
 }
 
-void MMTracker::get_img_tg(int id, cv::Point& tg) {
+bool MMTracker::get_img_tg(int id, cv::Point& tg) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
-		return;
+		return false;
 	} else {
 		tg = _targets[id]->img_target;
+		return true;
 	}
 }
 
-void MMTracker::get_b_tg(int id, std::array<float, 3>& tg) {
+bool MMTracker::get_b_tg(int id, std::array<float, 3>& tg) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
-		return;
+		return false;
 	} else {
 		tg = _targets[id]->b_tg;
+		return true;
 	}
 }
 
-void MMTracker::get_mask(int id, cv::Mat& m) {
+bool MMTracker::get_mask(int id, cv::Mat& m) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
-		return;
+		return false;
 	} else {
 		_targets[id]->depth_mask.copyTo(m);
+		return true;
 	}
 }
 
-void MMTracker::get_depthROI(int id, cv::Mat& m) {
+bool MMTracker::get_depthROI(int id, cv::Mat& m) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
-		return;
+		return false;
 	} else {
 		_targets[id]->depth_roi.copyTo(m);
+		return true;
 	}
 }
 
-void MMTracker::get_depthTG(int id, std::array<int, 3>& tg) {
+bool MMTracker::get_depthTG(int id, std::array<int, 3>& tg) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
-		return;
+		return false;
 	} else {
 		tg = _targets[id]->depth_tg;
+		return true;
 	}
 }
 
@@ -647,8 +667,9 @@ void MMTracker::opticalflow_runnable() {
 				// Check if the movement is associated to a point
 				// which is already tracked
 				//
+				//
+				std::unique_lock<std::mutex> lk(_mx);
 				for (int i = 0; i < ks; i++) {
-
 					cv::Mat mask = (labels == i);
 					double area = cv::sum(mask)[0];	
 
@@ -659,7 +680,8 @@ void MMTracker::opticalflow_runnable() {
 
 						for (auto el : _targets) {
 							//std::cout << el.second->roi << std::endl;
-							if (el.second->roi.contains(p)) {
+							cv::Rect2d roi = el.second->roi;
+							if (!roi.empty() && roi.contains(p)) {
 								//std::cout << "Already tracked" << std::endl;
 								newroi = false;	
 							}	
@@ -689,11 +711,15 @@ void MMTracker::opticalflow_runnable() {
 							// Check in the global map if there is something there
 							for (auto el : _wm->getMap()) {
 								double dist = (el.second->tg - W_t).norm();
-								if (dist < 0.5) {
+								if (dist < 0.9) {
 									std::cout << "Locking target " <<
 										"@ x = " << p.x << " y = " << p.y <<
-										std::endl;
-									add_target(el.first, tgroi);
+										std::endl << tgroi << std::endl;
+									//add_target(el.first, tgroi);
+									TargetData* p_td = new TargetData();
+
+									p_td->roi = tgroi;
+									_targets.insert(std::pair<int, TargetData*>(el.first, p_td));
 									break;
 								} else {
 									std::cout << "False Positive" << std::endl;

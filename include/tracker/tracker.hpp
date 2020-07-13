@@ -118,21 +118,21 @@ class MMTracker {
 		void setCamMatrix(rs2_intrinsics intr, double scale);
 
 		// GETTERS
-		void get_ROI(int i, cv::Rect2d& roi);
+		bool get_ROI(int i, cv::Rect2d& roi);
 
-		void get_img_tg(int i, cv::Point& tg);
+		bool get_img_tg(int i, cv::Point& tg);
 
-		void get_b_tg(int i, std::array<float, 3>& tg);
+		bool get_b_tg(int i, std::array<float, 3>& tg);
 
-		void get_mask(int i, cv::Mat& m);
+		bool get_mask(int i, cv::Mat& m);
 
-		void get_depthROI(int i, cv::Mat& m);
+		bool get_depthROI(int i, cv::Mat& m);
 
-		void get_depthTG(int i, std::array<int, 3>& tg);
+		bool get_depthTG(int i, std::array<int, 3>& tg);
 
-		void get_rgbROI(int i, cv::Mat& m); 
+		bool get_rgbROI(int i, cv::Mat& m); 
 
-		void get_flowmask(int i, cv::Mat& m);
+		bool get_flowmask(int i, cv::Mat& m);
 
 		void get_histogram(cv::Mat& hist_img, int numBins,
 				const cv::Mat& depth_roi, int target_depth);

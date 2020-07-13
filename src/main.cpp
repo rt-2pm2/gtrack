@@ -83,7 +83,7 @@ void track_runnable(void* arg) {
 		if (dt < 0.0001)
 			dt = 0.001;
 
-		//pfilt->prediction(dt);
+		pfilt->prediction(0.04);
 
 		// Get the RGB image
 		pdev->get_rgb(cvRGB);
@@ -102,7 +102,7 @@ void track_runnable(void* arg) {
 
 				ptrk->get_b_tg(0, pos);
 				Eigen::Vector3d pos_(pos[0], pos[1], pos[2]);
-				//pfilt->update(pos_);
+				pfilt->update(pos_);
 			}
 		}
 	}
@@ -178,7 +178,9 @@ int main(int argc, char* argv[]) {
 		cout << "No config, using default." << endl;
 	}
 
-	wmap.add_target_data(0, Eigen::Vector3d(-0.9, 0, 0.1));
+	// Initialize the map with my knowledge of the initial 
+	// configuration.
+	wmap.add_target_data(0, Eigen::Vector3d(-0.5, 0, 0.2));
 
 	// =========================================
 	// Realsense Device	
@@ -217,7 +219,7 @@ int main(int argc, char* argv[]) {
 	// =========================================
 	// Filter
 	//
-	DDFilter ddfil(Eigen::Vector3d::Zero(), 5, 0.03);
+	DDFilter ddfil(Eigen::Vector3d::Zero(), 20, 0.03);
 
 
 	// =========================================
@@ -305,10 +307,12 @@ int main(int argc, char* argv[]) {
 				cv::Rect2d roi;
 				std::array<float, 3> pos;
 
-				trk.get_mask(0, mask);
-				trk.get_img_tg(0, tg);
-				trk.get_ROI(0, roi);
-				trk.get_b_tg(0, pos);
+				bool haveinfo = true;
+				haveinfo &= trk.get_mask(0, mask);
+				haveinfo &= trk.get_img_tg(0, tg);
+				haveinfo &= trk.get_ROI(0, roi);
+				haveinfo &= trk.get_b_tg(0, pos);
+
 				Eigen::Vector3d pos_(pos[0], pos[1], pos[2]);
 
 				if (!mask.empty())
@@ -372,9 +376,10 @@ int main(int argc, char* argv[]) {
 				trk.get_depthROI(0, depth_roi);
 				trk.get_depthTG(0, v);
 				int numBins = 200;	
-				trk.get_histogram(hist_img, numBins, depth_roi, v[2]);
-
-				cv::imshow("Hist", hist_img);
+				if (!depth_roi.empty()) {
+					trk.get_histogram(hist_img, numBins, depth_roi, v[2]);
+					cv::imshow("Hist", hist_img);
+				}
 
 				// =====================================================
 				// Visualization =======================================

@@ -44,4 +44,7 @@ bin/*
 *.sh
 *.gnuplot
 
+#ROS / Logs
+*.bag
+*.csv
 

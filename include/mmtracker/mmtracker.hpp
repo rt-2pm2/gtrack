@@ -115,7 +115,9 @@ class MMTracker {
 
 		void set_flow_thr(double thr, double norm_thr);
 
-		void setCamMatrix(rs2_intrinsics intr, double scale);
+		void setCamMatrix(rs2_intrinsics intr);
+
+		void setDepthScale(double scale);
 
 		// GETTERS
 		bool get_ROI(int i, cv::Rect2d& roi);
@@ -275,5 +277,4 @@ class MMTracker {
 		 */
 		double _opt_flow_detect_thr;
 };
-
 #endif

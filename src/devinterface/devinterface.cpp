@@ -8,13 +8,13 @@
 #include "utils/opencv_conv.hpp"
 #include "devinterface/devinterface.hpp"
 #include "utils/timelib.hpp"
-
+#include "utils/utils.hpp"
 
 DeviceInterface::DeviceInterface() {
-	playback = false;
+	_isplayback = false;
 	active = false;
 
-	dev_cfg.playback = playback;
+	dev_cfg.playback = _isplayback;
 
 	input_queue = new rs2::frame_queue(QUEUE_SIZE, false);
 	filt_queue = new rs2::frame_queue(QUEUE_SIZE, false);
@@ -22,10 +22,16 @@ DeviceInterface::DeviceInterface() {
 	init = true;
 }
 
-DeviceInterface::DeviceInterface(const DevConfig& cf) : dev_cfg(cf){
+DeviceInterface::DeviceInterface(const DevConfig& cf,
+		rs2::context ctx, rs2::device dev) : dev_cfg(cf){
 	active = false;
-	playback = false;
-	dev_cfg.playback = playback;
+	dev_cfg  = cf;
+	_isplayback = dev_cfg.playback;
+
+	_ctx = ctx;
+	_dev = dev;
+
+	_serial = _dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 
 	input_queue = new rs2::frame_queue(QUEUE_SIZE, false);
 	filt_queue = new rs2::frame_queue(QUEUE_SIZE, false);
@@ -37,20 +43,27 @@ DeviceInterface::~DeviceInterface() {
 
 	if (input_thread.joinable()) {
 		input_thread.join();
-		std::cout << "Stopped input thread!" << std::endl;
+		std::cout << "Stopped input thread [" << 
+			_serial << "]!" << std::endl;
 	}
 	
 	if (conversion_thread.joinable()) {
 		conversion_thread.join();
-		std::cout << "Stopped conversion thread!" << std::endl;
+		std::cout << "Stopped conversion thread! [" << 
+			_serial << "]" << std::endl;
 	}
-
+	
 	std::cout << "Device Stopped!" << std::endl;
 };
 
 
+DevConfig& DeviceInterface::getDevConfig() {
+	return dev_cfg;
+}
+
 // ========================================================
-bool DeviceInterface::startDevice(bool playback, std::string bag_name) {
+bool DeviceInterface::startDevice(int operation, std::string filename) {
+	_cfg.enable_device(_serial);
 
 	// Configure the pipeline
 	_cfg.enable_stream(RS2_STREAM_DEPTH,
@@ -63,23 +76,45 @@ bool DeviceInterface::startDevice(bool playback, std::string bag_name) {
 			dev_cfg.rgb_format,
 			dev_cfg.rgb_framerate);
 
-	std::cout << "Starting Pipeline..." << std::endl;
+	std::cout << "Starting Pipeline[" << _serial << 
+		"]..." << std::endl;
 
 	if (!init) { 
 		std::cerr << "Device not configured..." << std::endl;
 		return false;
 	}
 
-	if (bag_name.size() > 1) {
-		if (!playback) {
+	// Bag File
+	std::string bag_name = filename + 
+		_dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) +
+		std::string(".bag");
+
+	switch (operation) {
+		case (RSTRK_RECORDING):
+			std::cout << "RECORDING mode " << std::endl;
+			if (file_exist(bag_name)) {
+				std::cerr << "File already exist!" << std::endl;
+				return -1;
+			}
 			std::cout << "Recording to " << bag_name << std::endl;
 			_cfg.enable_record_to_file(bag_name);
-		} else {
-			std::cout << "Streaming from " << bag_name << std::endl;
-			_cfg.enable_device_from_file(bag_name);
-		}
+			_isplayback = false;
+			break;	
+		case (RSTRK_PLAYBACK):
+			std::cout << "PLAYBACK mode " << std::endl;
+			if (file_exist(bag_name)) {
+				std::cout << "Streaming from " << bag_name << std::endl;
+				_cfg.enable_device_from_file(bag_name);
+			} else {
+				std::cout << "Source file does not exists!" << std::endl;
+				return -1;
+			}
+			_isplayback = true;
+			break;
+		default:
+			std::cout << "ONLINE mode " << std::endl;
+			_isplayback = false;
 	}
-	
 	profile = _pipeline.start(_cfg);
 	std::cout << "Pipeline started!" << std::endl;
 
@@ -87,7 +122,7 @@ bool DeviceInterface::startDevice(bool playback, std::string bag_name) {
 	// about the sensors and finish the configuration.
 	rs2::depth_sensor d_sensor = profile.get_device().first<rs2::depth_sensor>();
 	if (d_sensor && d_sensor.is<rs2::depth_stereo_sensor>()) {
-		if (!playback) {
+		if (operation != RSTRK_PLAYBACK) {
 			// Set Accuracy
 			d_sensor.set_option(RS2_OPTION_VISUAL_PRESET,
 					RS2_RS400_VISUAL_PRESET_HIGH_ACCURACY);
@@ -115,25 +150,28 @@ void DeviceInterface::stopDevice(bool wait) {
 	active = false;
 
 	if (wait) {
-		if (input_thread.joinable()) {
-			input_thread.join();
-			std::cout << "Stopped input thread!" << std::endl;
-		}
-
 		if (conversion_thread.joinable()) {
 			conversion_thread.join();
-			std::cout << "Stopped conversion thread!" << std::endl;
+			std::cout << "Stopped input thread [" << 
+				_serial << "]!" << std::endl;
+		}
+
+		if (input_thread.joinable()) {
+			input_thread.join();
+			std::cout << "Stopped input thread [" << 
+				_serial << "]!" << std::endl;
 		}
 	}
+	_pipeline.stop();	
 }
 
 void DeviceInterface::playbackPause() {
-	if (playback)
+	if (_isplayback)
 		profile.get_device().as<rs2::playback>().pause();
 }
 
 void DeviceInterface::playbackResume() {
-	if (playback)
+	if (_isplayback)
 		profile.get_device().as<rs2::playback>().resume();
 }
 
@@ -192,6 +230,9 @@ bool DeviceInterface::synchronize() {
 	return true;
 }
 
+std::string& DeviceInterface::getSerial() {
+	return _serial;
+}
 
 
 // ===========================================================

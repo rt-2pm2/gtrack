@@ -17,11 +17,17 @@
 
 #include <thread>
 #include <condition_variable>
+#include <string>
 
 #include <librealsense2/rs.hpp>
 #include <librealsense2/rsutil.h>
 
 #include "utils/camdata.hpp"
+
+#define RSTRK_PLAYBACK (0)
+#define RSTRK_RECORDING (1)
+#define RSTRK_ONLINE (2)
+
 
 
 /**
@@ -85,7 +91,7 @@ class DeviceInterface {
 		/**
 		 * Constructor with Configuration Struct
 		 */
-		DeviceInterface(const DevConfig& cf);
+		DeviceInterface(const DevConfig&, rs2::context, rs2::device);
 
 		/**
 		 * Default destructor
@@ -100,7 +106,7 @@ class DeviceInterface {
 		 * Start the device pipeline and finish the configuration
 		 * of the streams.
 		 */
-		bool startDevice(bool playback, std::string bag_name);
+		bool startDevice(int operation, std::string bag_name);
 
 		/**
 		 * Stop
@@ -123,6 +129,8 @@ class DeviceInterface {
 		 */
 		bool getCameraParam(cv::Mat& cameraMat, cv::Mat& coeff);
 		bool getCameraParam(rs2_intrinsics& intr);
+		DevConfig& getDevConfig();
+
 
 		/**
 		 * Get images
@@ -133,7 +141,17 @@ class DeviceInterface {
 
 		bool synchronize();
 
+		std::string& getSerial();
+
 	private:
+
+		bool _isplayback;
+
+		/**
+		 * Device serial number
+		 */
+		std::string _serial;
+
 		/**
 		 * Flag to indicate that the basic stream info
 		 * has been set.
@@ -149,6 +167,17 @@ class DeviceInterface {
 		 * Playback status
 		 */
 		bool playback;
+
+		/**
+		 * Context
+		 */
+		rs2::context _ctx;
+
+		/**
+		 * Device
+		 */
+		rs2::device _dev;
+
 
 		/**
 		 * Realsense device Pipeline

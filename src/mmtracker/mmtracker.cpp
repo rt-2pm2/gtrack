@@ -4,7 +4,7 @@
 #include <opencv2/video/tracking.hpp>
 #include <opencv2/core.hpp>
 
-#include "tracker/tracker.hpp"
+#include "mmtracker/mmtracker.hpp"
 #include "utils/timelib.hpp"
 
 
@@ -29,6 +29,8 @@ MMTracker::MMTracker() {
 
 	_log_flow.open("trk_flow_log.csv");
 	_log_trk.open("trk_log.csv");
+
+	
 }
 
 
@@ -159,8 +161,11 @@ void MMTracker::position2pixel(cv::Point& pt, const Eigen::Vector3d& pos) {
 }
 
 
-void MMTracker::setCamMatrix(rs2_intrinsics intr, double scale) {
+void MMTracker::setCamMatrix(rs2_intrinsics intr) {
 	_camera_intr = intr;
+}
+
+void MMTracker::setDepthScale(double scale) {
 	_dscale = scale;
 }
 

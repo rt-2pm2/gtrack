@@ -7,154 +7,67 @@
 #include <fstream>
 #include <unordered_map>
 #include <jsoncpp/json/json.h>
-#include <sys/stat.h>
 
 #include "arucodetector/arucodetector.hpp"
 #include "devinterface/devinterface.hpp"
-#include "tracker/tracker.hpp"
+#include "rstracker/rstracker.hpp"
+
 #include "filter/ddfilter.hpp"
 #include "utils/timelib.hpp"
+#include "utils/utils.hpp"
 #include "utils/shared_map.hpp"
 
-#define ARUCO_DEBUG
+//#define ARUCO_DEBUG
 
 using namespace std;
 
-int _WIDTH = 1280;
-int _HEIGHT = 720;
+int _WIDTH = 848;
+int _HEIGHT = 480;
 int _FPS = 30;
 double _DEPTH_SCALE = 0.0001;
-
-bool shutting_down = false;
-
-std::unordered_map<int, BodyTarget> aruco_map;
-std::thread tracking_thr;
-
-struct tracker_arg {
-	DeviceInterface* pdev;
-	MMTracker* ptrk;
-	DDFilter* pfilt;
-	SharedMap* pwmap;
-}; 
-
-bool file_exist(std::string filename) {
-	bool out = false;
-	struct stat buf;
-
-	if ((stat(filename.c_str(), &buf) == 0)) {
-		out = true;
-	}
-	return out;
-}
-
-void track_runnable(void* arg) {
-	tracker_arg* parg = static_cast<tracker_arg*>(arg);
-
-	DeviceInterface* pdev = parg->pdev;
-	MMTracker* ptrk = parg->ptrk;
-	DDFilter* pfilt = parg->pfilt;
-	SharedMap* pwmap = parg->pwmap;
-	
-
-	double dt = 0.03;
-	timespec t_now, t_old;
-	t_old = t_now;
-
-	int CameraStabCounter = 40;
-
-	cv::Mat cvRGB, cvDepth;
-	cv::Mat cvFrameDepth;	
-	std::array<float, 3> pos;
-
-	std::cout << "Activating Flow Thread!" << std::endl;
-	ptrk->start_flow();
-
-	while (!shutting_down) {
-		// This runnable is synchronized on the arrival of new frame
-		pdev->synchronize();	
-
-		clock_gettime(CLOCK_MONOTONIC, &t_now);
-		dt = (timespec2micro(&t_now) - timespec2micro(&t_old)) / 1e6;
-		t_old = t_now;
-
-		//cout << "Tracker DT = " << dt << endl;
-
-		// Avoid too little 'dt'
-		if (dt < 0.0001)
-			dt = 0.001;
-
-		pfilt->prediction(0.04);
-
-		// Get the RGB image
-		pdev->get_rgb(cvRGB);
-		pdev->get_depth(cvDepth);
-
-		if (CameraStabCounter > 0) {
-			CameraStabCounter--;
-		}
-
-		double depth_target = 0;
-
-		if (!cvRGB.empty() && !cvDepth.empty()) {
-			// Check whether the camera is stabilized
-			if (CameraStabCounter == 0) {
-				ptrk->step(cvRGB, cvDepth);
-
-				ptrk->get_b_tg(0, pos);
-				Eigen::Vector3d pos_(pos[0], pos[1], pos[2]);
-				pfilt->update(pos_);
-			}
-		}
-	}
-	ptrk->stop_flow();
-}
 
 int main(int argc, char* argv[]) {
 	int key = 49;
 
 	double dt;	
-	ofstream outfile("est.csv");
 
-	std::string filename("record_");	
+	std::string filename("rec_");	
 	std::string config_file("config.json");
 
-	bool playback = true;
+	bool playback = false;
+	bool recording = false;
+	int operation = RSTRK_ONLINE;
 	int option;
 
 	SharedMap wmap;
 
-	while ((option = getopt(argc, argv, ":p:f:")) != -1) {
+	/**
+	 * Parse options
+	 * - 'p': playback
+	 */
+	while ((option = getopt(argc, argv, "rpf:")) != -1) {
 		switch (option) {
-			//For option i, r, l, print that these are options
-			case 'p':
-				if (atoi(optarg) == 1) {
-					cout << "Playback" << endl;
-					playback = true;
-				} else {
-					cout << "Recording" << endl;
-					playback = false;
-				}
+			case 'r': // Recording
+				recording = true;
+				playback = false;
+				operation = RSTRK_RECORDING;
 				break;
-			case 'f': //here f is used for some file name		
+			case 'p': // Activate playback
+				playback = true;
+				recording = false;
+				operation = RSTRK_PLAYBACK;
+				break;
+			case 'f': // Select file
 				filename = std::string(optarg);
 				cout << "Filename : " << filename << endl;
 				break;
 		}
 	}
 
-	outfile << "Time" << " ";
-	outfile << "w_px w_py w_pz" << " ";
-	outfile << "b_px b_py b_pz" << " ";
-	outfile << "b_vx b_vy b_vz" << " ";
-	outfile << "b_ax b_ay b_az" << std::endl;
-
+	if (playback) { cout << " ==== Playback Mode ==== " << endl; }
+	if (recording) { cout << "++++ Recording Active ++++ " << endl; }
+	
 	cout << "Starting..." << endl;
-	std::string full = std::string("data/") + filename + std::string(".bag");
-
-	if (file_exist(full) && !playback) {
-		std::cerr << "File already exist!" << std::endl;
-		return -1;
-	}
 
 	if (file_exist(config_file)) {
 		cout << "Found configuration file!" << endl;
@@ -185,7 +98,6 @@ int main(int argc, char* argv[]) {
 	// =========================================
 	// Realsense Device	
 	//
-	cout << "Creating the device" << endl;
 	DevConfig devcfg;
 	devcfg.depth_width = _WIDTH;
 	devcfg.depth_height = _HEIGHT;
@@ -194,14 +106,34 @@ int main(int argc, char* argv[]) {
 	devcfg.rgb_height = _HEIGHT;
 	devcfg.rgb_framerate = _FPS;
 	
-	DeviceInterface mydev(devcfg);
-	mydev.startDevice(playback, full);
-	rs2_intrinsics intr;
-	mydev.getCameraParam(intr);
+	// Check the connected devices
+	rs2::context ctx;
+	std::vector<DeviceInterface*> mydevs;
+	std::vector<RSTracker*> ptrackers;
 
-	cv::Mat cmat; 
-	cv::Mat ddsf;
-	mydev.getCameraParam(cmat, ddsf);
+	/*
+	 * For each device create the device interface class and pass it to the 
+	 * constructor of the RSTracker which host all the other components.
+	 * I wanted to ecapsulate the other components in the RSTracker because
+	 * I think they are all related to the same task. Anyway, I preferred to 
+	 * use just references in the RSTracker because the components can be 
+	 * independet for testing/reusing purposes.
+	 *
+	 * I keep a reference to the devices to easily fetch images for the UI.
+	 */
+	for (auto&& dev : ctx.query_devices()) {
+		cout << "Adding Device..." << endl;
+		DeviceInterface* pdev = new DeviceInterface(devcfg, ctx, dev);
+		RSTracker* ptrk = new RSTracker(pdev);
+		ptrk->addWorldMap(&wmap);
+
+		// Add to the vector of device and trackers
+		mydevs.push_back(pdev);
+		ptrackers.push_back(ptrk);	
+
+		// Start the acquisitioa(not the tracking)
+		ptrk->start_device(operation, filename);
+	}
 
 	cv::Mat cvRGB, cvDepthCol, cvFrame;
 	std::string title;
@@ -209,34 +141,6 @@ int main(int argc, char* argv[]) {
 	cv::VideoWriter oWriter_rgb("./output_rgb.avi",
 			cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10,
 			cv::Size(devcfg.depth_width, devcfg.depth_height), true);
-
-	// =========================================
-	// Aruco Detector
-	// Import the camera intrisic from the realsense
-	ArucoDetector aruco_detector(cmat, ddsf, 0.14, 0);
-
-	
-	// =========================================
-	// Filter
-	//
-	DDFilter ddfil(Eigen::Vector3d::Zero(), 20, 0.03);
-
-
-	// =========================================
-	// Tracker
-	MMTracker trk;
-	//trk.add_target(0, cv::Rect2d(1100, 450, 100, 100));
-	trk.setCamMatrix(intr, _DEPTH_SCALE);
-	trk.addWorldMap(&wmap);
-	tracker_arg trk_arg;
-	
-	if (playback) {
-		trk_arg.pdev = &mydev;
-		trk_arg.ptrk = &trk;
-		trk_arg.pfilt = &ddfil;
-		trk_arg.pwmap = &wmap;
-		//tracking_thr = std::thread(track_runnable, &trk_arg);
-	}
 
 	// =========================================
 	// Opencv Windows 
@@ -252,13 +156,16 @@ int main(int argc, char* argv[]) {
 	cv::namedWindow("Flow", cv::WINDOW_AUTOSIZE);
 	cv::moveWindow("Flow", 1280, 800);
 
-
-	int InitCounter = 20;
-	bool TrkRunning = false;
-
 	timespec t_now, t_old;
 	clock_gettime(CLOCK_MONOTONIC, &t_now);
 	t_old = t_now;
+
+	int img_type = 1;
+	int dev_select = 0;
+	DeviceInterface* mydev = mydevs[0];
+	MMTracker* trk = ptrackers[0]->getMMTracker();
+	DDFilter* ddfil = ptrackers[0]->getDDFilter();
+
 	while (key != 27) {
 		int curr_key = cv::waitKey(1);
 
@@ -271,24 +178,51 @@ int main(int argc, char* argv[]) {
 			key = curr_key;
 		}
 
-		// Wait for new data to arrive
-		mydev.synchronize();	
+		// Select the device and image type
+		switch (key) {
+			case 49:
+				title = "Device 0";
+				dev_select = 0;
+				mydev = mydevs[dev_select];
+				trk = ptrackers[dev_select]->getMMTracker();
+				ddfil = ptrackers[dev_select]->getDDFilter();
+				break;
+			case 50:
+				title = "Device 1";
+				dev_select = 1;
+				mydev = mydevs[dev_select];
+				trk = ptrackers[dev_select]->getMMTracker();
+				ddfil = ptrackers[dev_select]->getDDFilter();
+				break;
+			case 51:
+				img_type = 1;
+				break;
+			case 52:
+				img_type = 2;
+				break;
+			default:
+				title = "Device 0";
+				mydev = mydevs[0];
+				break;
+		}
+
+		// Wait for new data from the selected device to arrive
+		mydev->synchronize();	
 		clock_gettime(CLOCK_MONOTONIC, &t_now);
 		dt = (timespec2micro(&t_now) - timespec2micro(&t_old)) / 1e6;
 		t_old = t_now;
 		
 		// Get the RGB image
-		mydev.get_rgb(cvRGB);
-
+		mydev->get_rgb(cvRGB);
 		// Get the Depth information (measure + visualization map)
-		mydev.get_depth_col(cvDepthCol);
-
-		switch (key) {
-			case 49:
+		mydev->get_depth_col(cvDepthCol);
+		
+		switch (img_type) {
+			case 1:
 				title = "RGB";
 				cvRGB.copyTo(cvFrame);
 				break;
-			case 50:
+			case 2:
 				title = "Depth";
 				cvDepthCol.copyTo(cvFrame);
 				break;
@@ -296,8 +230,9 @@ int main(int argc, char* argv[]) {
 				title = "RGB";
 				cvRGB.copyTo(cvFrame);
 				break;
-		}	
+		}
 
+		
 		if (!cvFrame.empty()) {
 			cv::Mat outputImage = cvFrame.clone();
 
@@ -307,77 +242,46 @@ int main(int argc, char* argv[]) {
 				cv::Rect2d roi;
 				std::array<float, 3> pos;
 
-				bool haveinfo = true;
-				haveinfo &= trk.get_mask(0, mask);
-				haveinfo &= trk.get_img_tg(0, tg);
-				haveinfo &= trk.get_ROI(0, roi);
-				haveinfo &= trk.get_b_tg(0, pos);
+				trk->get_mask(0, mask);
+				trk->get_img_tg(0, tg);
+				trk->get_ROI(0, roi);
+				trk->get_b_tg(0, pos);
 
 				Eigen::Vector3d pos_(pos[0], pos[1], pos[2]);
 
 				if (!mask.empty())
 					cv::imshow("Mask", mask);
 
-				Eigen::Vector3d est_p = ddfil.getPos();
-				Eigen::Vector3d est_v = ddfil.getVel();
-
-				if (InitCounter > 0) {
-					InitCounter--;
-
-					int Ndetected = 0;
-					DetectionData detect_data;
-
-					if (!cvFrame.empty()) {
-						Ndetected = aruco_detector.processImage(
-								aruco_map, detect_data, cvFrame, 0);
-					}
+				Eigen::Vector3d est_p = ddfil->getPos();
+				Eigen::Vector3d est_v = ddfil->getVel();
 
 #ifdef ARUCO_DEBUG
-					if (Ndetected > 0) {
-						cv::aruco::drawDetectedMarkers(outputImage,
-								detect_data.mk_corners_,
-								detect_data.mk_ids_);
+				DetectionData ddata = 
+					ptrackers[dev_select]->getArucoDetection();
+				cv::aruco::drawDetectedMarkers(outputImage,
+						ddata.mk_corners_,
+						ddata.mk_ids_);
 
-						cv::aruco::drawAxis(outputImage,
-								cmat, ddsf,
-								detect_data.rvecs_, detect_data.tvecs_,
-								0.1);
-					}
+				cv::aruco::drawAxis(outputImage,
+						cmat, ddsf,
+						ddata.rvecs_,
+						ddata.tvecs_,
+						0.1);
 #endif
-				}
-
-				if (InitCounter == 0 && TrkRunning == false && playback) {
-					trk.set_transform(aruco_map[1].C_p_CM_,
-							aruco_map[1].q_CM_);
-					tracking_thr = std::thread(track_runnable, &trk_arg);
-					TrkRunning = true;
-				}
-
-				// Compute the position of the target w.r.t the World Frame
-				Eigen::Vector3d W_t = (aruco_map[1].q_CM_.inverse() * (pos_ - aruco_map[1].C_p_CM_));
-
-				outfile << timespec2micro(&t_now) << " ";
-				outfile << W_t(0) << " " << W_t(1) << " " << W_t(2) << " ";
-				outfile << est_p(0) << " " << est_p(1) << " " << est_p(2) << " ";
-				outfile << est_v(0) << " " << est_v(1) << " " << est_v(2) << " ";
-				outfile << aruco_map[1].C_p_CM_(0) << " " <<
-					aruco_map[1].C_p_CM_(1) << " " << aruco_map[1].C_p_CM_(2);
-				outfile << endl;
-
 
 				cv::Mat fl_mask;
-				trk.get_flowmask(0, fl_mask);
+				trk->get_flowmask(0, fl_mask);
 				if (!fl_mask.empty())
 					imshow("Flow", fl_mask);
 
 				cv::Mat hist_img;
 				cv::Mat depth_roi;
 				std::array<int, 3> v;
-				trk.get_depthROI(0, depth_roi);
-				trk.get_depthTG(0, v);
+				trk->get_depthROI(0, depth_roi);
+				trk->get_depthTG(0, v);
 				int numBins = 200;	
 				if (!depth_roi.empty()) {
-					trk.get_histogram(hist_img, numBins, depth_roi, v[2]);
+					trk->get_histogram(hist_img, numBins, depth_roi, v[2]);
 					cv::imshow("Hist", hist_img);
 				}
 
@@ -385,7 +289,7 @@ int main(int argc, char* argv[]) {
 				// Visualization =======================================
 				cv::Point kf_pt;
 				cv::Point dd_pt;
-				trk.position2pixel(dd_pt, est_p);
+				trk->position2pixel(dd_pt, est_p);
 
 				cv::circle(outputImage, dd_pt, 10, cv::Scalar(0, 0, 255), 2);
 				cv::circle(outputImage, tg, 15, cv::Scalar(0, 255, 0), 2);
@@ -410,15 +314,16 @@ int main(int argc, char* argv[]) {
 
 
 	}
-	shutting_down = true;
+	
 	oWriter_rgb.release();
-	outfile.close();
 	cout << "Ending..." << endl;
 
-	if (tracking_thr.joinable())
-		tracking_thr.join();
+	for (auto el : ptrackers) {
+		el->stop_tracking();
+	}
 
-	mydev.stopDevice(true);
+	cout << "Terminating..." << endl;
+	cv::waitKey(5000);
 
 	return 0;
 }

@@ -17,7 +17,7 @@
 #include "utils/utils.hpp"
 #include "utils/shared_map.hpp"
 
-//#define ARUCO_DEBUG
+#define ARUCO_DEBUG
 
 using namespace std;
 
@@ -67,7 +67,6 @@ int main(int argc, char* argv[]) {
 	if (playback) { cout << " ==== Playback Mode ==== " << endl; }
 	if (recording) { cout << "++++ Recording Active ++++ " << endl; }
 	
-	cout << "Starting..." << endl;
 
 	if (file_exist(config_file)) {
 		cout << "Found configuration file!" << endl;
@@ -121,6 +120,9 @@ int main(int argc, char* argv[]) {
 	 *
 	 * I keep a reference to the devices to easily fetch images for the UI.
 	 */
+
+	cout << " ================= " << endl;
+	cout << "	Starting..." << endl;
 	for (auto&& dev : ctx.query_devices()) {
 		cout << "Adding Device..." << endl;
 		DeviceInterface* pdev = new DeviceInterface(devcfg, ctx, dev);
@@ -231,10 +233,25 @@ int main(int argc, char* argv[]) {
 				cvRGB.copyTo(cvFrame);
 				break;
 		}
-
 		
 		if (!cvFrame.empty()) {
 			cv::Mat outputImage = cvFrame.clone();
+
+#ifdef ARUCO_DEBUG
+				cv::Mat cmat, ddsf;
+				mydev->getCameraParam(cmat, ddsf);
+				DetectionData ddata = 
+					ptrackers[dev_select]->getArucoDetection();
+				cv::aruco::drawDetectedMarkers(outputImage,
+						ddata.mk_corners_,
+						ddata.mk_ids_);
+
+				cv::aruco::drawAxis(outputImage,
+						cmat, ddsf,
+						ddata.rvecs_,
+						ddata.tvecs_,
+						0.1);
+#endif
 
 			if (playback) {
 				cv::Point tg;
@@ -255,19 +272,6 @@ int main(int argc, char* argv[]) {
 				Eigen::Vector3d est_p = ddfil->getPos();
 				Eigen::Vector3d est_v = ddfil->getVel();
 
-#ifdef ARUCO_DEBUG
-				DetectionData ddata = 
-					ptrackers[dev_select]->getArucoDetection();
-				cv::aruco::drawDetectedMarkers(outputImage,
-						ddata.mk_corners_,
-						ddata.mk_ids_);
-
-				cv::aruco::drawAxis(outputImage,
-						cmat, ddsf,
-						ddata.rvecs_,
-						ddata.tvecs_,
-						0.1);
-#endif
 
 				cv::Mat fl_mask;
 				trk->get_flowmask(0, fl_mask);

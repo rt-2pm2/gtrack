@@ -225,7 +225,7 @@ void MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 		cv::findNonZero(tg_data->depth_mask, indexes);
 		int nrows = tg_data->depth_mask.rows;
 		int ncols = tg_data->depth_mask.cols;
-		bool depthvalid = false; 
+		bool depthvalid = true; 
 		for (int k_ = 0; k_ < indexes.total(); k_++) {
 			cv::Point p = indexes.at<cv::Point>(k_);
 			if (p.x == 0 || p.x == (ncols - 1)) {

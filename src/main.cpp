@@ -28,6 +28,7 @@ int _HEIGHT = 480;
 int _FPS = 30;
 double _DEPTH_SCALE = 0.0001;
 
+
 int main(int argc, char* argv[]) {
 	int key = 49;
 
@@ -35,6 +36,8 @@ int main(int argc, char* argv[]) {
 
 	std::string filename("rec_");	
 	std::string config_file("config.json");
+	
+	std::ofstream _outfile("global.csv");
 
 	bool playback = false;
 	bool recording = false;
@@ -324,11 +327,14 @@ int main(int argc, char* argv[]) {
 			}
 		*/	
 		}
-
-
+		Eigen::Vector3d W_tg;
+		wmap.get_target_data(0, W_tg);
+		_outfile << timespec2micro(&t_now) << " " << W_tg(0) <<
+			" " << W_tg(1) << " " << W_tg(2) << endl;
 	}
 	
 	oWriter_rgb.release();
+	_outfile.close();
 	cout << "Ending..." << endl;
 
 	for (auto el : ptrackers) {

@@ -157,21 +157,23 @@ void RSTracker::track_runnable() {
 				pos_(i) = pos[i];
 			}
 			_pfilt->update(pos_);
-
 		}
 		Eigen::Vector3d est_p = _pfilt->getPos();
 		Eigen::Vector3d est_v = _pfilt->getVel();
 
 		// Compute the position of the target w.r.t the World Frame
-		Eigen::Vector3d W_t = (_aruco_map[1].q_CM_.inverse() *
-				(pos_ - _aruco_map[1].C_p_CM_));
+		if (pos_.norm() > 0.001) {
+			Eigen::Vector3d W_t = (_aruco_map[1].q_CM_.inverse() *
+					(pos_ - _aruco_map[1].C_p_CM_));
 
-		_outfile << timespec2micro(&t_now) << " ";
-		_outfile << W_t(0) << " " << W_t(1) << " " << W_t(2) << " ";
-		_outfile << est_p(0) << " " << est_p(1) << " " << est_p(2) << " ";
-		_outfile << est_v(0) << " " << est_v(1) << " " << est_v(2);
-		_outfile << std::endl;
+			_outfile << timespec2micro(&t_now) << " ";
+			_outfile << W_t(0) << " " << W_t(1) << " " << W_t(2) << " ";
+			_outfile << est_p(0) << " " << est_p(1) << " " << est_p(2) << " ";
+			_outfile << est_v(0) << " " << est_v(1) << " " << est_v(2);
+			_outfile << std::endl;
+			_world_map->add_target_data(0, W_t);
 
+		}
 	}
 	_ptrk->stop_flow();
 }

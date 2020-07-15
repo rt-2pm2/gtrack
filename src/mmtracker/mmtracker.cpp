@@ -210,38 +210,41 @@ void MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 		// 2) I mask the pixel with a given distance from the camera to locate the 
 		// position of the target in the image;
 		// 3) I convert the pixel coordinates into real-world coordinates.
-		cv::Rect2d local_roi = tg_data->roi;
+		//cv::Rect2d local_roi = tg_data->roi;
 		//bool ok = opt_tracker->update(cvFrame, local_roi);
 		find_target_in_roi(tg_data, nclust, attempts);
 
 		int img_x_global = 0;
 		int img_y_global = 0;
 
+		// I check that the selected depth is not on the border of the 
+		// roi. I need to apply this step because if the background
+		// is not well separated from the drone the detection will
+		// drift away.
 		cv::Mat indexes;
 		cv::findNonZero(tg_data->depth_mask, indexes);
-
 		int nrows = tg_data->depth_mask.rows;
 		int ncols = tg_data->depth_mask.cols;
-		bool notvalid = false; 
+		bool depthvalid = false; 
 		for (int k_ = 0; k_ < indexes.total(); k_++) {
 			cv::Point p = indexes.at<cv::Point>(k_);
 			if (p.x == 0 || p.x == (ncols - 1)) {
 				//std::cout << "Cazzo X " << p << std::endl;
 				//std::cout << tg_data->roi << std::endl;
-				notvalid = true;
+				depthvalid = false;
 				break;
 			}
 			
 			if (p.y == 0 || p.y == (nrows - 1)) {
 				//std::cout << "Cazzo Y " << p << std::endl;
 				//std::cout << tg_data->roi << std::endl;
-				notvalid = true;
+				depthvalid = false;
 				break;
 			}
 		}
 
 		// Update the ROI (If the detection area makes sense)	
-		if (!notvalid) {
+		if (depthvalid) {
 			// Compute the pixel coordinates of the target in the full frame.
 			img_x_global = tg_data->depth_tg[0] + tg_data->roi.tl().x;
 			img_y_global = tg_data->depth_tg[1] + tg_data->roi.tl().y;
@@ -284,13 +287,15 @@ void MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 				b_target_[2] << std::endl;
 			el_it++;
 		} else {
-			std::cout << "Depth not valid" << std::endl;
-			
+			std::cout << "Depth not valid" << std::endl;	
 			/*
 			   img_x_global = local_roi.tl().x + local_roi.width;
 			   img_y_global = local_roi.tl().y + local_roi.height;
 			   tg_data->roi = local_roi;
 			*/	
+
+			// If the depth measurement was not valid remove the 
+			// target from the local map of the tracked vehicles.
 			el_it = _targets.erase(el_it);
 		}
 	}
@@ -597,9 +602,6 @@ void MMTracker::opticalflow_runnable() {
 
 	int flow_height = _frame_height * _opt_flow_scale;
 	int flow_width = _frame_width * _opt_flow_scale;
-	cv::VideoWriter oWriter_flow("./output_flow.avi",
-			cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 1e6 / T_us,
-			cv::Size(flow_width, flow_height), true);
 
 	clock_gettime(CLOCK_MONOTONIC, &nextAct);
 	while (_flow_thread_active) {
@@ -749,18 +751,18 @@ void MMTracker::opticalflow_runnable() {
 			cv::cvtColor(hsv8, bgr, cv::COLOR_HSV2BGR);
 
 			// Save video to file
+			/*
 			if (!bgr.empty()) {
 				cv::Mat out;
 				cv::cvtColor(bgr, out, cv::COLOR_BGR2RGB);
-				oWriter_flow.write(bgr);
 			}
+			*/
 		}
 
 		cvPrev = cvNext;
 		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,  &nextAct, NULL);
 	}
 
-	oWriter_flow.release();
 	std::cout << "Terminating FlowThread!" << std::endl;
 }
 

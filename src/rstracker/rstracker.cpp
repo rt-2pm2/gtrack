@@ -92,6 +92,8 @@ bool RSTracker::start_tracking() {
 	// Block until the camera has acquired the refernce
 	while (!_ready) { }
 
+	std::cout << "Start Tracking from [" << _pdev->getSerial() << "]" <<
+		std::endl;
 	_trk_thread = std::thread(&RSTracker::track_runnable, this);
 
 	return true;

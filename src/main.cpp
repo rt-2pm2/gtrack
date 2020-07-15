@@ -18,6 +18,8 @@
 #include "utils/shared_map.hpp"
 
 #define ARUCO_DEBUG
+#define HIST_DEBUG
+#define MASK_DEBUG
 
 using namespace std;
 
@@ -121,8 +123,9 @@ int main(int argc, char* argv[]) {
 	 * I keep a reference to the devices to easily fetch images for the UI.
 	 */
 
-	cout << " ================= " << endl;
-	cout << "	Starting..." << endl;
+	cout << " ============================= " << endl;
+	cout << " <-.->     Starting      <-.-> " << endl;
+	cout << endl;
 	for (auto&& dev : ctx.query_devices()) {
 		cout << "Adding Device..." << endl;
 		DeviceInterface* pdev = new DeviceInterface(devcfg, ctx, dev);
@@ -150,14 +153,18 @@ int main(int argc, char* argv[]) {
 	cv::namedWindow("Monitor", cv::WINDOW_AUTOSIZE + cv::WINDOW_OPENGL);
 	cv::moveWindow("Monitor", 0, 0);
 
+#ifdef HIST_DEBUG
+	cv::namedWindow("Hist", cv::WINDOW_AUTOSIZE);
+	cv::moveWindow("Hist", 1280, 200);
+#endif
+
+#ifdef MASK_DEBUG
 	cv::namedWindow("Mask", cv::WINDOW_AUTOSIZE);
 	cv::moveWindow("Mask", 1280, 0);
 
-	cv::namedWindow("Hist", cv::WINDOW_AUTOSIZE);
-	cv::moveWindow("Hist", 1280, 200);
-
 	cv::namedWindow("Flow", cv::WINDOW_AUTOSIZE);
 	cv::moveWindow("Flow", 1280, 800);
+#endif
 
 	timespec t_now, t_old;
 	clock_gettime(CLOCK_MONOTONIC, &t_now);
@@ -234,72 +241,73 @@ int main(int argc, char* argv[]) {
 				cvRGB.copyTo(cvFrame);
 				break;
 		}
-		
+
 		if (!cvFrame.empty()) {
 			cv::Mat outputImage = cvFrame.clone();
 
 #ifdef ARUCO_DEBUG
-				cv::Mat cmat, ddsf;
-				mydev->getCameraParam(cmat, ddsf);
-				DetectionData ddata = 
-					ptrackers[dev_select]->getArucoDetection();
-				cv::aruco::drawDetectedMarkers(outputImage,
-						ddata.mk_corners_,
-						ddata.mk_ids_);
+			cv::Mat cmat, ddsf;
+			mydev->getCameraParam(cmat, ddsf);
+			DetectionData ddata = 
+				ptrackers[dev_select]->getArucoDetection();
+			cv::aruco::drawDetectedMarkers(outputImage,
+					ddata.mk_corners_,
+					ddata.mk_ids_);
 
-				cv::aruco::drawAxis(outputImage,
-						cmat, ddsf,
-						ddata.rvecs_,
-						ddata.tvecs_,
-						0.1);
+			cv::aruco::drawAxis(outputImage,
+					cmat, ddsf,
+					ddata.rvecs_,
+					ddata.tvecs_,
+					0.1);
 #endif
 
-			if (playback) {
-				cv::Point tg;
-				cv::Mat mask;
-				cv::Rect2d roi;
-				std::array<float, 3> pos;
+			cv::Point tg;
+			trk->get_img_tg(0, tg);
 
-				trk->get_mask(0, mask);
-				trk->get_img_tg(0, tg);
-				trk->get_ROI(0, roi);
-				trk->get_b_tg(0, pos);
+			cv::Rect2d roi;
+			trk->get_ROI(0, roi);
 
-				Eigen::Vector3d pos_(pos[0], pos[1], pos[2]);
+			std::array<float, 3> pos;
+			trk->get_b_tg(0, pos);
+			Eigen::Vector3d pos_(pos[0], pos[1], pos[2]);
 
-				if (!mask.empty())
-					cv::imshow("Mask", mask);
+			Eigen::Vector3d est_p = ddfil->getPos();
+			Eigen::Vector3d est_v = ddfil->getVel();
 
-				Eigen::Vector3d est_p = ddfil->getPos();
-				Eigen::Vector3d est_v = ddfil->getVel();
+#ifdef MASK_DEBUG
+			cv::Mat mask;
+			trk->get_mask(0, mask);
+			if (!mask.empty())
+				cv::imshow("Mask", mask);
 
+			cv::Mat fl_mask;
+			trk->get_flowmask(0, fl_mask);
+			if (!fl_mask.empty())
+				imshow("Flow", fl_mask);
+#endif
 
-				cv::Mat fl_mask;
-				trk->get_flowmask(0, fl_mask);
-				if (!fl_mask.empty())
-					imshow("Flow", fl_mask);
-
-				cv::Mat hist_img;
-				cv::Mat depth_roi;
-				std::array<int, 3> v;
-				trk->get_depthROI(0, depth_roi);
-				trk->get_depthTG(0, v);
-				int numBins = 200;	
-				if (!depth_roi.empty()) {
-					trk->get_histogram(hist_img, numBins, depth_roi, v[2]);
-					cv::imshow("Hist", hist_img);
-				}
-
-				// =====================================================
-				// Visualization =======================================
-				cv::Point kf_pt;
-				cv::Point dd_pt;
-				trk->position2pixel(dd_pt, est_p);
-
-				cv::circle(outputImage, dd_pt, 10, cv::Scalar(0, 0, 255), 2);
-				cv::circle(outputImage, tg, 15, cv::Scalar(0, 255, 0), 2);
-				cv::rectangle(outputImage, roi, cv::Scalar(0, 0, 255), 2, 1);
+#ifdef HIST_DEBUG
+			cv::Mat hist_img;
+			cv::Mat depth_roi;
+			std::array<int, 3> v;
+			trk->get_depthROI(0, depth_roi);
+			trk->get_depthTG(0, v);
+			int numBins = 200;	
+			if (!depth_roi.empty()) {
+				trk->get_histogram(hist_img, numBins, depth_roi, v[2]);
+				cv::imshow("Hist", hist_img);
 			}
+#endif
+
+			// =====================================================
+			// Visualization =======================================
+			cv::Point kf_pt;
+			cv::Point dd_pt;
+			trk->position2pixel(dd_pt, est_p);
+
+			cv::circle(outputImage, dd_pt, 10, cv::Scalar(0, 0, 255), 2);
+			cv::circle(outputImage, tg, 15, cv::Scalar(0, 255, 0), 2);
+			cv::rectangle(outputImage, roi, cv::Scalar(0, 0, 255), 2, 1);
 			//cout << "Main DT = " << dt << endl;
 			cv::imshow("Monitor", outputImage);
 			oWriter_rgb.write(outputImage);

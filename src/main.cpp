@@ -145,7 +145,7 @@ int main(int argc, char* argv[]) {
 	std::string title;
 	
 	cv::VideoWriter oWriter_rgb("./output_rgb.avi",
-			cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10,
+			cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 30,
 			cv::Size(devcfg.depth_width, devcfg.depth_height), true);
 
 	// =========================================

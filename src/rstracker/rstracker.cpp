@@ -69,7 +69,7 @@ void RSTracker::start_device(int operation, std::string fname) {
 
 
 void RSTracker::autoSetWorldReference() {
-	int InitCounter = 40;
+	int InitCounter = 60;
 	cv::Mat cvFrame;
 	while (InitCounter > 0) {	
 		_pdev->synchronize();

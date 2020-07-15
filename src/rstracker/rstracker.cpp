@@ -50,7 +50,7 @@ void RSTracker::start_device(int operation, std::string fname) {
 	_outfile << "w_px w_py w_pz" << " ";
 	_outfile << "b_px b_py b_pz" << " ";
 	_outfile << "b_vx b_vy b_vz" << " ";
-	_outfile << "b_ax b_ay b_az" << std::endl;
+	_outfile << std::endl;
 
 	_pdev->startDevice(operation, fname);
 
@@ -167,9 +167,7 @@ void RSTracker::track_runnable() {
 		_outfile << timespec2micro(&t_now) << " ";
 		_outfile << W_t(0) << " " << W_t(1) << " " << W_t(2) << " ";
 		_outfile << est_p(0) << " " << est_p(1) << " " << est_p(2) << " ";
-		_outfile << est_v(0) << " " << est_v(1) << " " << est_v(2) << " ";
-		_outfile << _aruco_map[1].C_p_CM_(0) << " " <<
-			_aruco_map[1].C_p_CM_(1) << " " << _aruco_map[1].C_p_CM_(2);
+		_outfile << est_v(0) << " " << est_v(1) << " " << est_v(2);
 		_outfile << std::endl;
 
 	}

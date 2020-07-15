@@ -23,10 +23,10 @@ class SharedMap {
 
 		int add_target_data(int id, const Eigen::Vector3d& tg);
 		bool get_target_data(int, Eigen::Vector3d& tg);
-		std::unordered_map<int, MapData*> getMap();
+		std::unordered_map<int, MapData> getMap();
 
 	private:
-		std::unordered_map<int, MapData*> data; 
+		std::unordered_map<int, MapData> data; 
 		std::mutex _mx;
 };
 #endif

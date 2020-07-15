@@ -170,7 +170,9 @@ void MMTracker::setDepthScale(double scale) {
 }
 
 
-void MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
+int MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
+	int out = 0;
+
 	//XXX I should improve the way I protect the variables
 	std::unique_lock<std::mutex> lk(_mx);
 	int nclust = 4;
@@ -299,6 +301,9 @@ void MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 			el_it = _targets.erase(el_it);
 		}
 	}
+	out = _targets.size();
+
+	return out;
 }
 
 
@@ -675,7 +680,6 @@ void MMTracker::opticalflow_runnable() {
 				// which is already tracked
 				//
 				//
-				std::unique_lock<std::mutex> lk(_mx);
 				for (int i = 0; i < ks; i++) {
 					cv::Mat mask = (labels == i);
 					double area = cv::sum(mask)[0];	
@@ -685,6 +689,8 @@ void MMTracker::opticalflow_runnable() {
 						cv::Point p(centers.row(i));
 						//std::cout << "Point = " << p << std::endl;
 
+						// LOCK
+						std::unique_lock<std::mutex> lk(_mx);
 						for (auto el : _targets) {
 							//std::cout << el.second->roi << std::endl;
 							cv::Rect2d roi = el.second->roi;
@@ -693,6 +699,8 @@ void MMTracker::opticalflow_runnable() {
 								newroi = false;	
 							}	
 						}
+						lk.unlock();
+						// UNLOCK
 
 						if (newroi) {
 							// Define a ROI in the area of the movement
@@ -716,8 +724,9 @@ void MMTracker::opticalflow_runnable() {
 							Eigen::Vector3d W_t = (q_CM_.inverse() * (pos_ - C_p_CM_));
 
 							// Check in the global map if there is something there
-							for (auto el : _wm->getMap()) {
-								double dist = (el.second->tg - W_t).norm();
+							std::unordered_map<int, MapData> local_map_copy = _wm->getMap();
+							for (auto el : local_map_copy) {
+								double dist = (el.second.tg - W_t).norm();
 								if (dist < 0.9) {
 									std::cout << "Locking target " <<
 										"@ x = " << p.x << " y = " << p.y <<
@@ -726,11 +735,13 @@ void MMTracker::opticalflow_runnable() {
 									TargetData* p_td = new TargetData();
 
 									p_td->roi = tgroi;
+									lk.lock();
 									_targets.insert(std::pair<int, TargetData*>(el.first, p_td));
+									lk.unlock();
 									break;
 								} else {
 									std::cout << "False Positive" << std::endl;
-									std::cout << el.second->tg << std::endl;
+									std::cout << el.second.tg << std::endl;
 									std::cout << W_t << std::endl;
 								}
 							}

@@ -127,6 +127,7 @@ void RSTracker::track_runnable() {
 	cv::Mat cvRGB, cvDepth;
 	cv::Mat cvFrameDepth;	
 	std::array<float, 3> pos;
+	Eigen::Vector3d W_t = Eigen::Vector3d::Zero();
 
 	std::cout << "Activating Flow Thread!" << std::endl;
 	_ptrk->start_flow();
@@ -151,35 +152,36 @@ void RSTracker::track_runnable() {
 		_pdev->get_rgb(cvRGB);
 		_pdev->get_depth(cvDepth);
 
-		double depth_target = 0;
-		
+		int num_detect = 0;
+
 		Eigen::Vector3d pos_ = Eigen::Vector3d::Zero();
 		if (!cvRGB.empty() && !cvDepth.empty()) {
 			// Check whether the camera is stabilized
-			_ptrk->step(cvRGB, cvDepth);
+			num_detect = _ptrk->step(cvRGB, cvDepth);
 
-			_ptrk->get_b_tg(0, pos);
-			for (int i = 0; i < 3; i++) {
-				pos_(i) = pos[i];
+			if (num_detect > 0) {
+				_ptrk->get_b_tg(0, pos);
+				for (int i = 0; i < 3; i++) {
+					pos_(i) = pos[i];
+				}
+				_pfilt->update(pos_);
 			}
-			_pfilt->update(pos_);
 		}
 		Eigen::Vector3d est_p = _pfilt->getPos();
 		Eigen::Vector3d est_v = _pfilt->getVel();
 
-		// Compute the position of the target w.r.t the World Frame
-		if (pos_.norm() > 0.001) {
-			Eigen::Vector3d W_t = (_aruco_map[1].q_CM_.inverse() *
-					(pos_ - _aruco_map[1].C_p_CM_));
+		// Compute the position of the target w.r.t the World Frame	
+		if (num_detect > 0) {
+			W_t = (_aruco_map[1].q_CM_.inverse() *
+					(pos_ - _aruco_map[1].C_p_CM_));	
 
-			_outfile << timespec2micro(&t_now) << " ";
-			_outfile << W_t(0) << " " << W_t(1) << " " << W_t(2) << " ";
-			_outfile << est_p(0) << " " << est_p(1) << " " << est_p(2) << " ";
-			_outfile << est_v(0) << " " << est_v(1) << " " << est_v(2);
-			_outfile << std::endl;
 			_world_map->add_target_data(0, W_t);
-
 		}
+		_outfile << timespec2micro(&t_now) << " ";
+		_outfile << W_t(0) << " " << W_t(1) << " " << W_t(2) << " ";
+		_outfile << est_p(0) << " " << est_p(1) << " " << est_p(2) << " ";
+		_outfile << est_v(0) << " " << est_v(1) << " " << est_v(2);
+		_outfile << std::endl;
 	}
 	_ptrk->stop_flow();
 }

@@ -105,7 +105,7 @@ class MMTracker {
 		 * Takes the color image, the depth image and the
 		 * region of interest where the target is located
 		 */
-		void step(cv::Mat& rgb, cv::Mat& depth);
+		int step(cv::Mat& rgb, cv::Mat& depth);
 
 		void start_flow();
 

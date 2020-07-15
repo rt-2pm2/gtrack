@@ -83,6 +83,10 @@ void RSTracker::autoSetWorldReference() {
 
 	}
 
+	std::cout << "Camera [" << _pdev->getSerial() << "] Position = " <<
+		_aruco_map[1].q_CM_.inverse() * (-_aruco_map[1].C_p_CM_) <<
+		std::endl;
+
 	_ptrk->set_transform(_aruco_map[1].C_p_CM_,
 			_aruco_map[1].q_CM_);
 	_ready = true;

@@ -83,9 +83,11 @@ void RSTracker::autoSetWorldReference() {
 
 	}
 
+	Eigen::Vector3d campos = _aruco_map[1].q_CM_.inverse() *
+		(-_aruco_map[1].C_p_CM_);
+
 	std::cout << "Camera [" << _pdev->getSerial() << "] Position = " <<
-		_aruco_map[1].q_CM_.inverse() * (-_aruco_map[1].C_p_CM_) <<
-		std::endl;
+		campos.transpose() << std::endl;
 
 	_ptrk->set_transform(_aruco_map[1].C_p_CM_,
 			_aruco_map[1].q_CM_);

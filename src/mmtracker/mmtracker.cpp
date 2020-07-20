@@ -697,7 +697,7 @@ void MMTracker::opticalflow_runnable() {
 							if (!roi.empty() && roi.contains(p)) {
 								//std::cout << "Already tracked" << std::endl;
 								newroi = false;	
-							}	
+							}
 						}
 						lk.unlock();
 						// UNLOCK
@@ -728,8 +728,8 @@ void MMTracker::opticalflow_runnable() {
 							for (auto el : local_map_copy) {
 								double dist = (el.second.tg - W_t).norm();
 								if (dist < 0.9) {
-									std::cout << "Locking target " <<
-										"@ x = " << p.x << " y = " << p.y <<
+									std::cout << "Locking target [" << el.first <<
+										"] @ x = " << p.x << " y = " << p.y <<
 										std::endl << tgroi << std::endl;
 									//add_target(el.first, tgroi);
 									TargetData* p_td = new TargetData();
@@ -740,9 +740,9 @@ void MMTracker::opticalflow_runnable() {
 									lk.unlock();
 									break;
 								} else {
-									std::cout << "False Positive" << std::endl;
-									std::cout << el.second.tg << std::endl;
-									std::cout << W_t << std::endl;
+									std::cout << "Not Correspondence" << std::endl;
+									std::cout << "In World Map  = " << el.second.tg << std::endl;
+									std::cout << "In Local Map" << W_t << std::endl;
 								}
 							}
 							

@@ -17,6 +17,9 @@
 #include "utils/utils.hpp"
 #include "utils/shared_map.hpp"
 
+#include "rpcclient/rpc_client.hpp"
+
+
 #define ARUCO_DEBUG
 #define HIST_DEBUG
 #define MASK_DEBUG
@@ -43,6 +46,9 @@ int main(int argc, char* argv[]) {
 	bool recording = false;
 	int operation = RSTRK_ONLINE;
 	int option;
+
+	std::string ip("localhost");
+	RPCClient client(ip, 8080);
 
 	SharedMap wmap;
 
@@ -331,6 +337,16 @@ int main(int argc, char* argv[]) {
 		wmap.get_target_data(0, W_tg);
 		_outfile << timespec2micro(&t_now) << " " << W_tg(0) <<
 			" " << W_tg(1) << " " << W_tg(2) << endl;
+		
+		MapData data;
+		data.t = timespec2micro(&t_now);
+		data.id = 0;
+		data.x = W_tg(0);
+		data.x = W_tg(1);
+		data.x = W_tg(2);
+
+		client.send_data(data);
+		
 	}
 	
 	oWriter_rgb.release();

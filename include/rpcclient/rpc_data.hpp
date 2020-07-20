@@ -4,7 +4,7 @@
 #include "rpc/msgpack.hpp"
 
 
-struct MapData {
+struct RpcData {
 	// Timestamp
 	uint64_t t;
 	// Id

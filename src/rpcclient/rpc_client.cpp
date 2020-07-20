@@ -9,6 +9,6 @@ RPCClient::RPCClient(std::string ip, int port) :
 
 RPCClient::~RPCClient() {}
 
-void RPCClient::send_data(MapData data) {
+void RPCClient::send_data(RpcData data) {
 	pclient->call("new_data", data);
 }

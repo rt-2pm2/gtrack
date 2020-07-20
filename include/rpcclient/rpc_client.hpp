@@ -9,7 +9,7 @@ class RPCClient {
 		RPCClient(std::string ip, int port);
 		~RPCClient();
 
-		void send_data(MapData map_data);
+		void send_data(RpcData map_data);
 
 	private:
 		int _server_port;

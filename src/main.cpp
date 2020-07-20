@@ -338,7 +338,7 @@ int main(int argc, char* argv[]) {
 		_outfile << timespec2micro(&t_now) << " " << W_tg(0) <<
 			" " << W_tg(1) << " " << W_tg(2) << endl;
 		
-		MapData data;
+		RpcData data;
 		data.t = timespec2micro(&t_now);
 		data.id = 0;
 		data.x = W_tg(0);

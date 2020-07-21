@@ -5,6 +5,8 @@ source_dir := src
 binary_dir := bin
 data_dir := data
 
+rpcfolder = ./deps/rpclib
+
 program := gtrack
 modules := $(shell basename -a $(shell find ./src -mindepth 1 -type d))
 
@@ -12,6 +14,7 @@ sources := $(shell find $(source_dir) -type f -name "*.cpp")
 objects := $(patsubst $(source_dir)/%, $(binary_dir)/%, $(subst .cpp,.o, $(sources)))
 
 include_dirs := ./include
+include_dirs += $(rpcfolder)/include
 
 CXXFLAGS += -g
 
@@ -19,6 +22,7 @@ CPPFLAGS += $(addprefix -I, $(include_dirs))
 CPPFLAGS += `pkg-config opencv4 --cflags` `pkg-config eigen3 --cflags`
 
 LDFLAGS += `pkg-config opencv4 --libs` `pkg-config eigen3 --libs` -lrealsense2 -lpthread -ljsoncpp
+LDFLAGS += -L$(rpcfolder)/build -lrpc
 
 _obj_fld := $(dir $(objects))
 _build_dirs := $(shell for d in $(_obj_fld) $(data_dir); \

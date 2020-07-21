@@ -217,7 +217,7 @@ class MMTracker {
 		int find_target_depth(double* tg, double* tg_std,
 				const cv::Mat& depth, int attempts, double err);
 
-		void find_target_in_roi(TargetData* tg_data,
+		bool find_target_in_roi(TargetData* tg_data,
 				int ks, int attempts);
 
 		void find_target_in_roi(Eigen::Vector3d& b_tg,

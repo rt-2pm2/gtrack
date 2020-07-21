@@ -29,8 +29,6 @@ MMTracker::MMTracker() {
 
 	_log_flow.open("trk_flow_log.csv");
 	_log_trk.open("trk_log.csv");
-
-	
 }
 
 
@@ -214,68 +212,15 @@ int MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 		// 3) I convert the pixel coordinates into real-world coordinates.
 		//cv::Rect2d local_roi = tg_data->roi;
 		//bool ok = opt_tracker->update(cvFrame, local_roi);
-		find_target_in_roi(tg_data, nclust, attempts);
+		bool measvalid = find_target_in_roi(tg_data, nclust, attempts);
 
-		int img_x_global = 0;
-		int img_y_global = 0;
-
-		// I check that the selected depth is not on the border of the 
-		// roi. I need to apply this step because if the background
-		// is not well separated from the drone the detection will
-		// drift away.
-		cv::Mat indexes;
-		cv::findNonZero(tg_data->depth_mask, indexes);
-		int nrows = tg_data->depth_mask.rows;
-		int ncols = tg_data->depth_mask.cols;
-		bool depthvalid = true; 
-		for (int k_ = 0; k_ < indexes.total(); k_++) {
-			cv::Point p = indexes.at<cv::Point>(k_);
-			if (p.x == 0 || p.x == (ncols - 1)) {
-				//std::cout << "Cazzo X " << p << std::endl;
-				//std::cout << tg_data->roi << std::endl;
-				depthvalid = false;
-				break;
-			}
-			
-			if (p.y == 0 || p.y == (nrows - 1)) {
-				//std::cout << "Cazzo Y " << p << std::endl;
-				//std::cout << tg_data->roi << std::endl;
-				depthvalid = false;
-				break;
-			}
-		}
-
-		// Update the ROI (If the detection area makes sense)	
-		if (depthvalid) {
-			// Compute the pixel coordinates of the target in the full frame.
-			img_x_global = tg_data->depth_tg[0] + tg_data->roi.tl().x;
-			img_y_global = tg_data->depth_tg[1] + tg_data->roi.tl().y;
-			int img_x_std = tg_data->depth_tg_std[0];
-			int img_y_std = tg_data->depth_tg_std[1];	
-
-			tg_data->img_target.x = img_x_global;
-			tg_data->img_target.y = img_y_global;
-
-			// The std of the target area is used to update the height and
-			// width. 
-			// The ROI is moved in the center of the target.
-			tg_data->roi.height = std::min(100, std::max(5 * img_x_std, 100));
-			tg_data->roi.width = std::min(150, std::max(5 * img_y_std, 150));
-
-			int base_x = img_x_global - (tg_data->roi.width / 2.0);
-			int base_y = img_y_global - (tg_data->roi.height / 2.0);
-
-			tg_data->roi.x = std::max(0,
-					std::min(base_x, cvFrame.cols - (int)tg_data->roi.width)
-					);
-
-			tg_data->roi.y = std::max(0,
-					std::min(base_y, cvFrame.rows - (int)tg_data->roi.height)
-					);
-
+		if (measvalid) {
 			// Get the target position with respect to the camera frame
 			float b_target_[3] {};
-			float upixel[2] {(float)img_x_global, (float)img_y_global};
+			float upixel[2] {
+				(float)tg_data->img_target.x,
+				(float)tg_data->img_target.y
+			};
 
 			rs2_deproject_pixel_to_point(b_target_, &_camera_intr,
 					upixel, tg_data->depth_tg[2] * _dscale);
@@ -402,8 +347,10 @@ bool MMTracker::get_depthTG(int id, std::array<int, 3>& tg) {
 // ============================================================
 
 
-void MMTracker::find_target_in_roi(
-		TargetData* tg_data, int ks, int attempts) {
+bool MMTracker::find_target_in_roi(TargetData* tg_data,
+		int ks, int attempts) {
+	bool depthvalid = true;
+
 	double tg_dist;
 	double tg_dist_std;
 
@@ -429,20 +376,82 @@ void MMTracker::find_target_in_roi(
 			cv::THRESH_BINARY);
 
 	cv::bitwise_and(thr1, thr2, mask);
-	
-	// The threshold is a image with 1.0 in the selected region,
-	// compute the center of mass of the selected region.
-	mask.copyTo(tg_data->depth_mask);
-	cv::Moments Mm = cv::moments(mask);
-	tg_data->depth_mask_moments = Mm;
 
-	tg_data->depth_tg[0] = (int)(Mm.m10 / Mm.m00);
-	tg_data->depth_tg[1] = (int)(Mm.m01 / Mm.m00);
-	tg_data->depth_tg[2] = (int)tg_dist;
+	// I check that the selected depth is not on the border of the 
+	// roi. I need to apply this step because if the background
+	// is not well separated from the drone the detection will
+	// drift away.
 
-	tg_data->depth_tg_std[0] = (int)std::sqrt(Mm.mu20 / Mm.m00);
-	tg_data->depth_tg_std[1] = (int)std::sqrt(Mm.mu02 / Mm.m00);
-	tg_data->depth_tg_std[2] = (int)tg_dist_std;
+	cv::Mat indexes;
+	cv::findNonZero(mask, indexes);
+	int nrows = mask.rows;
+	int ncols = mask.cols;
+	 
+	for (int k_ = 0; k_ < indexes.total(); k_++) {
+		cv::Point p = indexes.at<cv::Point>(k_);
+		if (p.x == 0 || p.x == (ncols - 1)) {
+			depthvalid = false;
+			break;
+		}
+		if (p.y == 0 || p.y == (nrows - 1)) {
+			depthvalid = false;
+			break;
+		}
+	}
+
+	if (depthvalid) {
+		// The threshold is a image with 1.0 in the selected region,
+		// compute the center of mass of the selected region.
+		mask.copyTo(tg_data->depth_mask);
+		cv::Moments Mm = cv::moments(mask);
+		tg_data->depth_mask_moments = Mm;
+
+		int depth_tg[3];
+		int depth_tg_std[3];
+
+		depth_tg[0] = (int)(Mm.m10 / Mm.m00);
+		depth_tg[1] = (int)(Mm.m01 / Mm.m00);
+		depth_tg[2] = (int)tg_dist;
+		depth_tg_std[0] = (int)std::sqrt(Mm.mu20 / Mm.m00);
+		depth_tg_std[1] = (int)std::sqrt(Mm.mu02 / Mm.m00);
+		depth_tg_std[2] = (int)tg_dist_std;
+
+		// Compute the pixel coordinates of the target in the full frame.
+		int img_x_global = depth_tg[0] + tg_data->roi.tl().x;
+		int img_y_global = depth_tg[1] + tg_data->roi.tl().y;
+		int img_x_std = depth_tg_std[0];
+		int img_y_std = depth_tg_std[1];	
+
+		tg_data->img_target.x = img_x_global;
+		tg_data->img_target.y = img_y_global;
+
+		// The std of the target area is used to update the height and
+		// width. 
+		// The ROI is moved in the center of the target.
+		tg_data->roi.height = std::min(100, std::max(5 * img_x_std, 100));
+		tg_data->roi.width = std::min(150, std::max(5 * img_y_std, 150));
+
+		int base_x = img_x_global - (tg_data->roi.width / 2.0);
+		int base_y = img_y_global - (tg_data->roi.height / 2.0);
+
+		tg_data->roi.x = std::max(0,
+				std::min(base_x, cvFrame.cols - (int)tg_data->roi.width)
+				);
+
+		tg_data->roi.y = std::max(0,
+				std::min(base_y, cvFrame.rows - (int)tg_data->roi.height)
+				);
+
+		tg_data->depth_tg[0] = depth_tg[0];
+		tg_data->depth_tg[1] = depth_tg[1];
+		tg_data->depth_tg[2] = depth_tg[2];
+		tg_data->depth_tg_std[0] = depth_tg_std[0];
+		tg_data->depth_tg_std[1] = depth_tg_std[1];
+		tg_data->depth_tg_std[2] = depth_tg_std[2];
+		
+	} 
+
+	return depthvalid;
 }
 
 

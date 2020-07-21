@@ -17,6 +17,8 @@
 #include "utils/utils.hpp"
 #include "utils/shared_map.hpp"
 
+#include <dirent.h>
+
 #include "rpcclient/rpc_client.hpp"
 
 
@@ -31,6 +33,30 @@ int _HEIGHT = 480;
 int _FPS = 30;
 double _DEPTH_SCALE = 0.0001;
 
+static int name_filter(const struct dirent* dir_ent) {
+    if (!strcmp(dir_ent->d_name, ".") || !strcmp(dir_ent->d_name, "..")) return 0;
+    std::string fname = dir_ent->d_name;
+
+    if (fname.find(".bag") == std::string::npos) return 0;
+
+    return 1;
+}
+
+int search_bags(const std::string path, std::vector<std::string>& v_names) {
+	const char *dirp = path.c_str();
+	struct dirent **namelist;
+	int nfiles = scandir(dirp, &namelist, *name_filter, alphasort);
+
+	v_names.clear();
+    for (int i = 0; i < nfiles; i++) {
+        std::string fname = namelist[i]->d_name;
+        v_names.push_back(fname);
+        free(namelist[i]);
+    }
+    free(namelist);
+
+	return nfiles;
+}
 
 int main(int argc, char* argv[]) {
 	int key = 49;
@@ -38,8 +64,7 @@ int main(int argc, char* argv[]) {
 	double dt;	
 
 	std::string filename("rec_");	
-	std::string config_file("config.json");
-	
+	std::string config_file("config.json");	
 	std::ofstream _outfile("global.csv");
 
 	bool playback = false;
@@ -135,19 +160,46 @@ int main(int argc, char* argv[]) {
 	cout << " ============================= " << endl;
 	cout << " <-.->     Starting      <-.-> " << endl;
 	cout << endl;
-	for (auto&& dev : ctx.query_devices()) {
-		cout << "Adding Device..." << endl;
-		DeviceInterface* pdev = new DeviceInterface(devcfg, ctx, dev);
-		RSTracker* ptrk = new RSTracker(pdev);
-		ptrk->addWorldMap(&wmap);
 
-		// Add to the vector of device and trackers
-		mydevs.push_back(pdev);
-		ptrackers.push_back(ptrk);	
 
-		// Start the acquisitioa(not the tracking)
-		ptrk->start_device(operation, filename);
-		ptrk->start_tracking();
+	if (operation == RSTRK_PLAYBACK) {
+		std::vector<std::string> v_names;
+		search_bags("./", v_names);
+		
+		for (auto bagfile : v_names) {
+			cout << "Adding Device..." << endl;
+			DeviceInterface* pdev = new DeviceInterface();
+			RSTracker* ptrk = new RSTracker(pdev);
+			ptrk->addWorldMap(&wmap);
+
+			// Add to the vector of device and trackers
+			mydevs.push_back(pdev);
+			ptrackers.push_back(ptrk);	
+
+			// Start the acquisitioa(not the tracking)
+			ptrk->start_device(operation, bagfile);
+			ptrk->start_tracking();
+		}
+	} else {
+		auto devlist = ctx.query_devices();
+		if (devlist.size() == 0) {
+			cerr << "No devices connected!" << endl;
+			return -1;
+		}
+		for (auto&& dev : devlist) {
+			cout << "Adding Device..." << endl;
+			DeviceInterface* pdev = new DeviceInterface(devcfg, ctx, dev);
+			RSTracker* ptrk = new RSTracker(pdev);
+			ptrk->addWorldMap(&wmap);
+
+			// Add to the vector of device and trackers
+			mydevs.push_back(pdev);
+			ptrackers.push_back(ptrk);	
+
+			// Start the acquisitioa(not the tracking)
+			ptrk->start_device(operation, filename);
+			ptrk->start_tracking();
+		}
 	}
 
 	cv::Mat cvRGB, cvDepthCol, cvFrame;

@@ -23,7 +23,7 @@ DeviceInterface::DeviceInterface() {
 }
 
 DeviceInterface::DeviceInterface(const DevConfig& cf,
-		rs2::context ctx, rs2::device dev) : dev_cfg(cf){
+		rs2::context ctx, rs2::device dev) : dev_cfg(cf) {
 	active = false;
 	dev_cfg  = cf;
 	_isplayback = dev_cfg.playback;
@@ -62,35 +62,16 @@ DevConfig& DeviceInterface::getDevConfig() {
 }
 
 // ========================================================
-bool DeviceInterface::startDevice(int operation, std::string filename) {
-	_cfg.enable_device(_serial);
-
-	// Configure the pipeline
-	_cfg.enable_stream(RS2_STREAM_DEPTH,
-			dev_cfg.depth_width, dev_cfg.depth_height,
-			dev_cfg.depth_format,
-			dev_cfg.depth_framerate);
-
-	_cfg.enable_stream(RS2_STREAM_COLOR,
-			dev_cfg.rgb_width, dev_cfg.rgb_height,
-			dev_cfg.rgb_format,
-			dev_cfg.rgb_framerate);
-
-	std::cout << "Starting Pipeline[" << _serial << 
-		"]..." << std::endl;
-
-	if (!init) { 
-		std::cerr << "Device not configured..." << std::endl;
-		return false;
-	}
-
-	// Bag File
-	std::string bag_name = filename + 
-		_dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) +
-		std::string(".bag");
-
+bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 	switch (operation) {
-		case (RSTRK_RECORDING):
+		case (RSTRK_RECORDING):	
+			{
+			_cfg.enable_device(_serial);
+
+			// Bag File
+			std::string bag_name = 
+				_dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) +
+				std::string(".bag");
 			std::cout << "RECORDING mode " << std::endl;
 			if (file_exist(bag_name)) {
 				std::cerr << "File already exist!" << std::endl;
@@ -99,21 +80,67 @@ bool DeviceInterface::startDevice(int operation, std::string filename) {
 			std::cout << "Recording to " << bag_name << std::endl;
 			_cfg.enable_record_to_file(bag_name);
 			_isplayback = false;
+
+			// Configure the pipeline
+			_cfg.enable_stream(RS2_STREAM_DEPTH,
+					dev_cfg.depth_width, dev_cfg.depth_height,
+					dev_cfg.depth_format,
+					dev_cfg.depth_framerate);
+
+			_cfg.enable_stream(RS2_STREAM_COLOR,
+					dev_cfg.rgb_width, dev_cfg.rgb_height,
+					dev_cfg.rgb_format,
+					dev_cfg.rgb_framerate);
+
+			std::cout << "Starting Pipeline[" << _serial << 
+				"]..." << std::endl;
+
+			if (!init) { 
+				std::cerr << "Device not configured..." << std::endl;
+				return false;
+			}
 			break;	
+			}
 		case (RSTRK_PLAYBACK):
+			{
 			std::cout << "PLAYBACK mode " << std::endl;
-			if (file_exist(bag_name)) {
-				std::cout << "Streaming from " << bag_name << std::endl;
-				_cfg.enable_device_from_file(bag_name);
+			if (file_exist(bag_fname)) {
+				std::cout << "Streaming from " << bag_fname << std::endl;
+				_cfg.enable_device_from_file(bag_fname);
 			} else {
 				std::cout << "Source file does not exists!" << std::endl;
 				return -1;
 			}
 			_isplayback = true;
 			break;
+			}
 		default:
+			{
 			std::cout << "ONLINE mode " << std::endl;
 			_isplayback = false;
+
+			_cfg.enable_device(_serial);
+
+			// Configure the pipeline
+			_cfg.enable_stream(RS2_STREAM_DEPTH,
+					dev_cfg.depth_width, dev_cfg.depth_height,
+					dev_cfg.depth_format,
+					dev_cfg.depth_framerate);
+
+			_cfg.enable_stream(RS2_STREAM_COLOR,
+					dev_cfg.rgb_width, dev_cfg.rgb_height,
+					dev_cfg.rgb_format,
+					dev_cfg.rgb_framerate);
+
+			std::cout << "Starting Pipeline[" << _serial << 
+				"]..." << std::endl;
+
+			if (!init) { 
+				std::cerr << "Device not configured..." << std::endl;
+				return false;
+			}
+			break;
+			}
 	}
 	profile = _pipeline.start(_cfg);
 	std::cout << "Pipeline started!" << std::endl;

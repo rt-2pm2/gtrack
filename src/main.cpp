@@ -398,8 +398,8 @@ int main(int argc, char* argv[]) {
 		data.t = timespec2micro(&t_now);
 		data.id = 0;
 		data.x = W_tg(0);
-		data.x = W_tg(1);
-		data.x = W_tg(2);
+		data.y = W_tg(1);
+		data.z = W_tg(2);
 
 		client.send_data(data);
 		

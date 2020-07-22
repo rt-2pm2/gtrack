@@ -307,19 +307,23 @@ int main(int argc, char* argv[]) {
 			cv::Mat outputImage = cvFrame.clone();
 
 #ifdef ARUCO_DEBUG
-			cv::Mat cmat, ddsf;
-			mydev->getCameraParam(cmat, ddsf);
-			DetectionData ddata = 
-				ptrackers[dev_select]->getArucoDetection();
-			cv::aruco::drawDetectedMarkers(outputImage,
-					ddata.mk_corners_,
-					ddata.mk_ids_);
+			if (ptrackers[dev_select]->isReady()) {
+				cv::Mat cmat, ddsf;
+				mydev->getCameraParam(cmat, ddsf);
+				DetectionData ddata = 
+					ptrackers[dev_select]->getArucoDetection();
+				cv::aruco::drawDetectedMarkers(outputImage,
+						ddata.mk_corners_,
+						ddata.mk_ids_);
 
-			cv::aruco::drawAxis(outputImage,
-					cmat, ddsf,
-					ddata.rvecs_,
-					ddata.tvecs_,
-					0.1);
+				for (int i = 0; i < ddata.rvecs_.size(); i++) {
+					cv::aruco::drawAxis(outputImage,
+							cmat, ddsf,
+							ddata.rvecs_[i],
+							ddata.tvecs_[i],
+							0.1);
+				}
+			}
 #endif
 
 			cv::Point tg;

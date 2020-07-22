@@ -27,6 +27,10 @@ RSTracker::~RSTracker() {
 	_outfile.close();
 }
 
+bool RSTracker::isReady() {
+	return _ready;
+}
+
 bool RSTracker::stop_tracking() {
 	_shutting_down = true;
 	std::cout << "Stopping Tracker " << _pdev->getSerial() <<
@@ -114,7 +118,7 @@ DDFilter* RSTracker::getDDFilter() {
 	return _pfilt;
 }
 
-DetectionData& RSTracker::getArucoDetection() {
+DetectionData RSTracker::getArucoDetection() {
 	return _detect_data;
 }
 

@@ -41,7 +41,7 @@ class RSTracker {
 		 */
 		DDFilter* getDDFilter();
 		MMTracker* getMMTracker();
-		DetectionData& getArucoDetection();
+		DetectionData getArucoDetection();
 
 		/**
 		 * Start tracking thread
@@ -52,6 +52,11 @@ class RSTracker {
 		 * Stop tracking
 		 */
 		bool stop_tracking();
+
+		/**
+		 * Check if the tracker is set up with the arucos
+		 */
+		bool isReady();
 
 	private:
 

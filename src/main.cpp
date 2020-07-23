@@ -126,9 +126,12 @@ int main(int argc, char* argv[]) {
 		cout << "No config, using default." << endl;
 	}
 
+	timespec t_now, t_old;
+	clock_gettime(CLOCK_MONOTONIC, &t_now);
+
 	// Initialize the map with my knowledge of the initial 
 	// configuration.
-	wmap.add_target_data(0, Eigen::Vector3d(-0.5, 0, 0.2), Eigen::Vector3d::Zero(), 0);
+	wmap.add_target_data(timespec2micro(&t_now), Eigen::Vector3d(-0.5, 0, 0.2), Eigen::Vector3d::Zero(), 0);
 
 	// =========================================
 	// Realsense Device	
@@ -227,7 +230,6 @@ int main(int argc, char* argv[]) {
 	cv::moveWindow("Flow", 1280, 800);
 #endif
 
-	timespec t_now, t_old;
 	clock_gettime(CLOCK_MONOTONIC, &t_now);
 	t_old = t_now;
 

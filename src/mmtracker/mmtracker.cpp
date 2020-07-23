@@ -741,7 +741,7 @@ void MMTracker::opticalflow_runnable() {
 								if (dist < 0.9) {
 									std::cout << "Locking target [" << el.first << "]" <<
 										"@ x = " << p.x << " y = " << p.y <<
-										std::endl << tgroi << std::endl;
+										std::endl << tgroi << std::endl << std::endl;
 									//add_target(el.first, tgroi);
 									TargetData* p_td = new TargetData();
 

@@ -739,7 +739,7 @@ void MMTracker::opticalflow_runnable() {
 							for (auto el : local_map_copy) {
 								double dist = (el.second.pos - W_t).norm();
 								if (dist < 0.9) {
-									std::cout << "Locking target " <<
+									std::cout << "Locking target [" << el.first << "]" <<
 										"@ x = " << p.x << " y = " << p.y <<
 										std::endl << tgroi << std::endl;
 									//add_target(el.first, tgroi);
@@ -752,8 +752,8 @@ void MMTracker::opticalflow_runnable() {
 									break;
 								} else {
 									std::cout << "Not a good match" << std::endl;
-									std::cout << el.second.pos << std::endl;
-									std::cout << W_t << std::endl;
+									std::cout << el.second.pos.transpose() << std::endl;
+									std::cout << W_t.transpose() << std::endl;
 								}
 							}
 							

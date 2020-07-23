@@ -43,7 +43,7 @@ bool RSTracker::stop_tracking() {
 	_pdev->stopDevice(true);
 }
 
-void RSTracker::addWorldMap(SharedMap* map) {
+void RSTracker::addWorldMap(GlobalMap* map) {
 	_world_map = map;	
 	_ptrk->addWorldMap(map);
 }
@@ -179,7 +179,7 @@ void RSTracker::track_runnable() {
 			W_t = (_aruco_map[1].q_CM_.inverse() *
 					(pos_ - _aruco_map[1].C_p_CM_));	
 
-			_world_map->add_target_data(0, W_t);
+			_world_map->add_target_data(0, W_t, Eigen::Vector3d::Zero(), timespec2micro(&t_now));
 		}
 		_outfile << timespec2micro(&t_now) << " ";
 		_outfile << W_t(0) << " " << W_t(1) << " " << W_t(2) << " ";

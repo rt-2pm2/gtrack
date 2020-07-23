@@ -81,7 +81,7 @@ void MMTracker::set_flow_thr(double thr, double norm_thr) {
 }
 
 
-void MMTracker::addWorldMap(SharedMap* sm) {
+void MMTracker::addWorldMap(GlobalMap* sm) {
 	_wm = sm;
 }
 
@@ -606,7 +606,7 @@ void MMTracker::opticalflow_runnable() {
 	timespec nextAct;
 	timespec temp;	
 
-	_log_flow << "time[us] id min_flow max_flow xpix ypix" << std::endl;
+	_log_flow << "time[us] min_flow max_flow Npix" << std::endl;
 
 	// Wait to have a valid Frame
 	while (cvFrame.empty()) {}
@@ -666,7 +666,9 @@ void MMTracker::opticalflow_runnable() {
 			cv::findNonZero(flow_mask, nonzero_pix); 
 			nonzero_pix.convertTo(nonzero_pix, CV_32FC2, 1, 0);
 
-			_flow_mask = flow_mask;
+			if (!flow_mask.empty()) {
+				_flow_mask = flow_mask;
+			}
 
 			int Npix = nonzero_pix.total();
 			_log_flow << timespec2micro(&temp) << " " << min <<
@@ -733,9 +735,9 @@ void MMTracker::opticalflow_runnable() {
 							Eigen::Vector3d W_t = (q_CM_.inverse() * (pos_ - C_p_CM_));
 
 							// Check in the global map if there is something there
-							std::unordered_map<int, MapData> local_map_copy = _wm->getMap();
+							std::unordered_map<int, MapItem> local_map_copy = _wm->getMap();
 							for (auto el : local_map_copy) {
-								double dist = (el.second.tg - W_t).norm();
+								double dist = (el.second.pos - W_t).norm();
 								if (dist < 0.9) {
 									std::cout << "Locking target " <<
 										"@ x = " << p.x << " y = " << p.y <<
@@ -749,8 +751,8 @@ void MMTracker::opticalflow_runnable() {
 									lk.unlock();
 									break;
 								} else {
-									std::cout << "False Positive" << std::endl;
-									std::cout << el.second.tg << std::endl;
+									std::cout << "Not a good match" << std::endl;
+									std::cout << el.second.pos << std::endl;
 									std::cout << W_t << std::endl;
 								}
 							}

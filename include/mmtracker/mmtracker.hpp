@@ -25,7 +25,7 @@
 #include <mutex>
 #include <fstream>
 
-#include "utils/shared_map.hpp"
+#include "utils/global_map.hpp"
 
 
 struct TargetData {
@@ -87,7 +87,7 @@ class MMTracker {
 		MMTracker();
 		~MMTracker();
 
-		void addWorldMap(SharedMap* sm);
+		void addWorldMap(GlobalMap* sm);
 
 		void set_transform(const Eigen::Vector3d& t,
 				const Eigen::Quaterniond& q);
@@ -148,10 +148,10 @@ class MMTracker {
 		Eigen::Quaterniond q_CM_;
 
 		/**
-		 * Pointer to a class SharedMap which contains the 
+		 * Pointer to a class GlobalMap which contains the 
 		 * shared information regarding the 'world frame'
 		 */
-		SharedMap* _wm;
+		GlobalMap* _wm;
 
 
 		/**

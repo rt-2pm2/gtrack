@@ -15,7 +15,7 @@
 #include "filter/ddfilter.hpp"
 #include "utils/timelib.hpp"
 #include "utils/utils.hpp"
-#include "utils/shared_map.hpp"
+#include "utils/global_map.hpp"
 
 #include <dirent.h>
 
@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
 	std::string ip("localhost");
 	RPCClient client(ip, 8080);
 
-	SharedMap wmap;
+	GlobalMap wmap;
 
 	/**
 	 * Parse options
@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
 
 	// Initialize the map with my knowledge of the initial 
 	// configuration.
-	wmap.add_target_data(0, Eigen::Vector3d(-0.5, 0, 0.2));
+	wmap.add_target_data(0, Eigen::Vector3d(-0.5, 0, 0.2), Eigen::Vector3d::Zero(), 0);
 
 	// =========================================
 	// Realsense Device	
@@ -312,6 +312,7 @@ int main(int argc, char* argv[]) {
 				mydev->getCameraParam(cmat, ddsf);
 				DetectionData ddata = 
 					ptrackers[dev_select]->getArucoDetection();
+
 				cv::aruco::drawDetectedMarkers(outputImage,
 						ddata.mk_corners_,
 						ddata.mk_ids_);
@@ -389,19 +390,27 @@ int main(int argc, char* argv[]) {
 			}
 		*/	
 		}
-		Eigen::Vector3d W_tg;
-		wmap.get_target_data(0, W_tg);
-		_outfile << timespec2micro(&t_now) << " " << W_tg(0) <<
-			" " << W_tg(1) << " " << W_tg(2) << endl;
-		
-		RpcData data;
-		data.t = timespec2micro(&t_now);
-		data.id = 0;
-		data.x = W_tg(0);
-		data.y = W_tg(1);
-		data.z = W_tg(2);
 
-		client.send_data(data);
+
+		// Stream the information about the global map
+		for (auto el : wmap.getMap()) {
+			Eigen::Vector3d W_p(Eigen::Vector3d::Zero());
+			Eigen::Vector3d W_v(Eigen::Vector3d::Zero());
+
+			uint64_t stamp;
+			wmap.get_target_data(0, W_p, W_v, &stamp);
+			_outfile << stamp << " " << W_p(0) <<
+				" " << W_p(1) << " " << W_p(2) << endl;
+
+			RpcData data;
+			data.t = stamp;
+			data.id = 0;
+			data.x = W_p(0);
+			data.y = W_p(1);
+			data.z = W_p(2);
+
+			client.send_data(data);
+		}
 		
 	}
 	

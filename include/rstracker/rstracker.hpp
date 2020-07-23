@@ -17,7 +17,7 @@
 #include "mmtracker/mmtracker.hpp"
 #include "arucodetector/arucodetector.hpp"
 #include "filter/ddfilter.hpp"
-#include "utils/shared_map.hpp"
+#include "utils/global_map.hpp"
 
 class RSTracker {
 	public:
@@ -33,7 +33,7 @@ class RSTracker {
 		/**
 		 * Add World Map
 		 */
-		void addWorldMap(SharedMap* map);
+		void addWorldMap(GlobalMap* map);
 
 
 		/**
@@ -101,7 +101,7 @@ class RSTracker {
 		/**
 		 * World Map reference
 		 */
-		SharedMap* _world_map;
+		GlobalMap* _world_map;
 
 		/**
 		 * Runnable with the tracking routine

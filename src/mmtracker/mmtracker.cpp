@@ -19,12 +19,12 @@ MMTracker::MMTracker() {
 	_flowActive = false;;
 
 	_min_flow_threshold = 0.6;
-	_min_flow_threshold_norm = 0.8;
+	_min_flow_threshold_norm = 0.7;
 
 	_opt_flow_scale = 0.5;
 	_opt_flow_detect_thr = 200.0;
 
-	opt_flow_period.tv_nsec = 500 * 1e6; // ms
+	opt_flow_period.tv_nsec = 400 * 1e6; // ms
 	opt_flow_period.tv_sec = 0;
 
 	_log_flow.open("trk_flow_log.csv");
@@ -739,10 +739,10 @@ void MMTracker::opticalflow_runnable() {
 							for (auto el : local_map_copy) {
 								double dist = (el.second.pos - W_t).norm();
 								if (dist < 0.9) {
-									std::cout << "Locking target [" << el.first << "]" <<
+									std::cout << "Locking new target [" << el.first << "]" <<
 										"@ x = " << p.x << " y = " << p.y <<
 										std::endl << tgroi << std::endl << std::endl;
-									//add_target(el.first, tgroi);
+
 									TargetData* p_td = new TargetData();
 
 									p_td->roi = tgroi;

@@ -411,7 +411,7 @@ int main(int argc, char* argv[]) {
 			data.y = W_p(1);
 			data.z = W_p(2);
 
-			//client.send_data(data);
+			client.send_data(data);
 		}
 		
 	}

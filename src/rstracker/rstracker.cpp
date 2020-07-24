@@ -150,7 +150,6 @@ void RSTracker::track_runnable() {
 		if (dt < 0.0001)
 			dt = 0.001;
 
-		_pfilt->prediction(0.04);
 
 		// Get the RGB image
 		_pdev->get_rgb(cvRGB);
@@ -165,6 +164,8 @@ void RSTracker::track_runnable() {
 
 			if (num_detect > 0) {
 				_ptrk->get_b_tg(0, pos);
+				_pfilt->prediction(0.04);
+
 				for (int i = 0; i < 3; i++) {
 					pos_(i) = pos[i];
 				}

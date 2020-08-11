@@ -18,4 +18,10 @@ struct RpcData {
 	MSGPACK_DEFINE_ARRAY(t, id, x, y, z);
 };
 
+struct RpcSynchData {
+	uint64_t sec;
+    uint64_t nsec;
+	MSGPACK_DEFINE_ARRAY(sec, nsec);
+};
+
 #endif

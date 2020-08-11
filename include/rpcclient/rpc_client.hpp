@@ -1,6 +1,7 @@
 #include "rpc/client.h"
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include "rpc_data.hpp"
 
@@ -9,7 +10,11 @@ class RPCClient {
 		RPCClient(std::string ip, int port);
 		~RPCClient();
 
+		bool sync();
+
 		void send_data(RpcData map_data);
+		void get_worldmap(std::vector<RpcData>& vdata);
+
 
 	private:
 		int _server_port;

@@ -21,8 +21,8 @@ int GlobalMap::add_target_data(
 	if (_data.count(id) > 0) {
 		// Update
 		out = 0;
-		_data[id].pos = p + 0.4 * (_data[id].pos - p);
-		_data[id].vel = v + 0.4 * (_data[id].vel - v);
+		_data[id].pos = p + 0.8 * (_data[id].pos - p);
+		_data[id].vel = v + 0.8 * (_data[id].vel - v);
 		_data[id].timestamp = timestamp;
 	} else {
 		// Create

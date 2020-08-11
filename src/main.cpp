@@ -7,6 +7,7 @@
 #include <fstream>
 #include <unordered_map>
 #include <jsoncpp/json/json.h>
+#include <chrono>
 
 #include "arucodetector/arucodetector.hpp"
 #include "devinterface/devinterface.hpp"
@@ -22,6 +23,7 @@
 #include "rpcclient/rpc_client.hpp"
 
 
+
 #define ARUCO_DEBUG
 #define HIST_DEBUG
 #define MASK_DEBUG
@@ -32,6 +34,12 @@ int _WIDTH = 848;
 int _HEIGHT = 480;
 int _FPS = 30;
 double _DEPTH_SCALE = 0.0001;
+
+std::string ip("localhost");
+RPCClient client(ip, 8080);
+
+bool should_end = false;
+GlobalMap wmap;
 
 static int name_filter(const struct dirent* dir_ent) {
     if (!strcmp(dir_ent->d_name, ".") || !strcmp(dir_ent->d_name, "..")) return 0;
@@ -58,6 +66,26 @@ int search_bags(const std::string path, std::vector<std::string>& v_names) {
 	return nfiles;
 }
 
+
+void external_sync() {
+	timespec t_now;
+
+	while(!should_end) {
+		std::vector<RpcData> worlddata;
+		client.get_worldmap(worlddata);
+
+		clock_gettime(CLOCK_MONOTONIC, &t_now);
+		for (auto el : worlddata) {
+			wmap.add_target_data(el.id,
+					Eigen::Vector3d(el.x, el.y, el.z),
+					Eigen::Vector3d::Zero(),
+					timespec2micro(&t_now));
+		}
+		std::this_thread::sleep_for(1s);
+	}
+}
+
+
 int main(int argc, char* argv[]) {
 	int key = 49;
 
@@ -72,10 +100,11 @@ int main(int argc, char* argv[]) {
 	int operation = RSTRK_ONLINE;
 	int option;
 
-	std::string ip("localhost");
-	RPCClient client(ip, 8080);
 
-	GlobalMap wmap;
+	client.sync();
+
+	
+	std::thread world_thread(external_sync);
 
 	/**
 	 * Parse options
@@ -131,7 +160,7 @@ int main(int argc, char* argv[]) {
 
 	// Initialize the map with my knowledge of the initial 
 	// configuration.
-	wmap.add_target_data(0, Eigen::Vector3d(-0.5, 0, 0.2), Eigen::Vector3d::Zero(), timespec2micro(&t_now));
+	
 
 	// =========================================
 	// Realsense Device	
@@ -416,6 +445,7 @@ int main(int argc, char* argv[]) {
 		
 	}
 	
+	should_end = true;
 	oWriter_rgb.release();
 	_outfile.close();
 	cout << "Ending..." << endl;
@@ -423,6 +453,8 @@ int main(int argc, char* argv[]) {
 	for (auto el : ptrackers) {
 		el->stop_tracking();
 	}
+
+	world_thread.join();
 
 	cout << "Terminating..." << endl;
 	cv::waitKey(5000);

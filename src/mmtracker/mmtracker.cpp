@@ -22,9 +22,9 @@ MMTracker::MMTracker() {
 	_min_flow_threshold_norm = 0.7;
 
 	_opt_flow_scale = 0.5;
-	_opt_flow_detect_thr = 200.0;
+	_opt_flow_detect_thr = 150.0;
 
-	opt_flow_period.tv_nsec = 400 * 1e6; // ms
+	opt_flow_period.tv_nsec = 200 * 1e6; // ms
 	opt_flow_period.tv_sec = 0;
 
 	_log_flow.open("trk_flow_log.csv");
@@ -402,7 +402,6 @@ bool MMTracker::find_target_in_roi(TargetData* tg_data,
 	if (depthvalid) {
 		// The threshold is a image with 1.0 in the selected region,
 		// compute the center of mass of the selected region.
-		mask.copyTo(tg_data->depth_mask);
 		cv::Moments Mm = cv::moments(mask);
 		tg_data->depth_mask_moments = Mm;
 
@@ -428,8 +427,8 @@ bool MMTracker::find_target_in_roi(TargetData* tg_data,
 		// The std of the target area is used to update the height and
 		// width. 
 		// The ROI is moved in the center of the target.
-		tg_data->roi.height = std::min(100, std::max(5 * img_x_std, 100));
-		tg_data->roi.width = std::min(150, std::max(5 * img_y_std, 150));
+		tg_data->roi.height = std::min(80, std::max(5 * img_x_std, 80));
+		tg_data->roi.width = std::min(130, std::max(5 * img_y_std, 130));
 
 		int base_x = img_x_global - (tg_data->roi.width / 2.0);
 		int base_y = img_y_global - (tg_data->roi.height / 2.0);
@@ -715,17 +714,17 @@ void MMTracker::opticalflow_runnable() {
 
 						if (newroi) {
 							// Define a ROI in the area of the movement
-							int base_x = p.x - 70;
-							int base_y = p.y - 70;
+							int base_x = p.x - 40;
+							int base_y = p.y - 40;
 
 							int roix = std::max(0,
-									std::min(base_x, _frame_width - 140)
+									std::min(base_x, _frame_width - 80)
 									);
 							int roiy = std::max(0,
-									std::min(base_y, _frame_height - 140)
+									std::min(base_y, _frame_height - 80)
 									);
 
-							cv::Rect2d tgroi(roix, roiy, 140, 140);
+							cv::Rect2d tgroi(roix, roiy, 80, 80);
 							Eigen::Vector3d pos_;
 
 							// Try to identify a target postion in the ROI

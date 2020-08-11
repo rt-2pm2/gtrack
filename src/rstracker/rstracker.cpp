@@ -87,14 +87,14 @@ void RSTracker::autoSetWorldReference() {
 
 	}
 
-	Eigen::Vector3d campos = _aruco_map[1].q_CM_.inverse() *
-		(-_aruco_map[1].C_p_CM_);
+	Eigen::Vector3d campos = _aruco_map[0].q_CM_.inverse() *
+		(-_aruco_map[0].C_p_CM_);
 
 	std::cout << "Camera [" << _pdev->getSerial() << "] Position = " <<
 		campos.transpose() << std::endl;
 
-	_ptrk->set_transform(_aruco_map[1].C_p_CM_,
-			_aruco_map[1].q_CM_);
+	_ptrk->set_transform(_aruco_map[0].C_p_CM_,
+			_aruco_map[0].q_CM_);
 	_ready = true;
 }
 
@@ -177,8 +177,8 @@ void RSTracker::track_runnable() {
 
 		// Compute the position of the target w.r.t the World Frame	
 		if (num_detect > 0) {
-			W_t = (_aruco_map[1].q_CM_.inverse() *
-					(pos_ - _aruco_map[1].C_p_CM_));	
+			W_t = (_aruco_map[0].q_CM_.inverse() *
+					(pos_ - _aruco_map[0].C_p_CM_));
 
 			_world_map->add_target_data(0, W_t, Eigen::Vector3d::Zero(), timespec2micro(&t_now));
 		}

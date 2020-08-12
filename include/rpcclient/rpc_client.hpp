@@ -13,8 +13,7 @@ class RPCClient {
 		bool sync();
 
 		void send_data(RpcData map_data);
-		void get_worldmap(std::vector<RpcData>& vdata);
-
+		void get_worldmap(RpcData_v& vdata);
 
 	private:
 		int _server_port;

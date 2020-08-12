@@ -11,17 +11,22 @@ struct RpcData {
 	int id;
 
 	//Position
-	double x;
-	double y;
-	double z;
+	double xx;
+	double yy;
+	double zz;
 
-	MSGPACK_DEFINE_ARRAY(t, id, x, y, z);
+	MSGPACK_DEFINE_ARRAY(t, id, xx, yy, zz);
 };
 
 struct RpcSynchData {
 	uint64_t sec;
     uint64_t nsec;
 	MSGPACK_DEFINE_ARRAY(sec, nsec);
+};
+
+struct RpcData_v {
+    std::vector<RpcData> data;
+    MSGPACK_DEFINE_ARRAY(data);
 };
 
 #endif

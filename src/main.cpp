@@ -71,13 +71,13 @@ void external_sync() {
 	timespec t_now;
 
 	while(!should_end) {
-		std::vector<RpcData> worlddata;
+		RpcData_v worlddata;
 		client.get_worldmap(worlddata);
 
 		clock_gettime(CLOCK_MONOTONIC, &t_now);
-		for (auto el : worlddata) {
+		for (auto el : worlddata.data) {
 			wmap.add_target_data(el.id,
-					Eigen::Vector3d(el.x, el.y, el.z),
+					Eigen::Vector3d(el.xx, el.yy, el.zz),
 					Eigen::Vector3d::Zero(),
 					timespec2micro(&t_now));
 		}
@@ -436,9 +436,9 @@ int main(int argc, char* argv[]) {
 			RpcData data;
 			data.t = stamp;
 			data.id = 0;
-			data.x = W_p(0);
-			data.y = W_p(1);
-			data.z = W_p(2);
+			data.xx = W_p(0);
+			data.yy = W_p(1);
+			data.zz = W_p(2);
 
 			client.send_data(data);
 		}

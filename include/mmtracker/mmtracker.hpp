@@ -25,9 +25,14 @@
 #include <mutex>
 #include <fstream>
 
-#include "utils/global_map.hpp"
+#include "atlas/atlas.hpp"
 
 
+/**
+ * This data structure represent the target
+ * tracked by a single device. For this reason the information
+ * is with respect to sensor.
+ */
 struct TargetData {
 	/**
 	 * Pixel coordinate of the target.
@@ -38,7 +43,7 @@ struct TargetData {
 	 * Coordinates of the target in camera frame
 	 * [m].
 	 */
-	std::array<float, 3> b_tg;
+	Eigen::Vector3d b_tg;
 
 	/**
 	 * Intermediate target information:
@@ -46,6 +51,7 @@ struct TargetData {
 	 * - depth of that pixel [m].
 	 */
 	std::array<int, 3> depth_tg; 
+
 	/**
 	 * Distribution of the target depth
 	 * representation.
@@ -87,8 +93,6 @@ class MMTracker {
 		MMTracker();
 		~MMTracker();
 
-		void addWorldMap(GlobalMap* sm);
-
 		void set_transform(const Eigen::Vector3d& t,
 				const Eigen::Quaterniond& q);
 
@@ -107,9 +111,14 @@ class MMTracker {
 		 */
 		int step(cv::Mat& rgb, cv::Mat& depth);
 
-		void start_flow();
-
-		void stop_flow();
+		/**
+		 * Optical flow step.
+		 * Compute the optical flow using the current
+		 * frame passed to the function and information
+		 * of the previous step.
+		 */
+		void optical_flow_step(cv::Mat& cvFrame,
+				std::vector<TargetData>& untracked);
 
 		void set_delta_depth_param(double d);
 
@@ -124,7 +133,7 @@ class MMTracker {
 
 		bool get_img_tg(int i, cv::Point& tg);
 
-		bool get_b_tg(int i, std::array<float, 3>& tg);
+		bool get_b_tg(int i, Eigen::Vector3d& tg);
 
 		bool get_mask(int i, cv::Mat& m);
 
@@ -146,13 +155,6 @@ class MMTracker {
 		 */
 		Eigen::Vector3d C_p_CM_;
 		Eigen::Quaterniond q_CM_;
-
-		/**
-		 * Pointer to a class GlobalMap which contains the 
-		 * shared information regarding the 'world frame'
-		 */
-		GlobalMap* _wm;
-
 
 		/**
 		 * Opencv Tracker class
@@ -239,12 +241,12 @@ class MMTracker {
 
 		/**
 		 * Thread
-		 */
 		bool _flow_thread_active;
 		bool _flowActive;
 		std::thread _flow_thread;
-		void opticalflow_runnable(); 	
+		void opticalflow_runnable();
 
+		 */
 
 		// Optical Flow Parameters
 		/**
@@ -276,5 +278,19 @@ class MMTracker {
 		 * '_opt_flow_detect_thr' is that amount.
 		 */
 		double _opt_flow_detect_thr;
+
+
+		// For the optical flow
+		cv::Mat magnitude, angle, magn_norm;
+		cv::Mat cvPrev;
+		cv::Mat bgr;
+
+		double pyr_scale;
+		int levels;
+		int winsize;
+		int niters;
+		int poly_n;
+		double poly_sigma;
+		int flags;
 };
 #endif

@@ -17,7 +17,8 @@
 #include "mmtracker/mmtracker.hpp"
 #include "arucodetector/arucodetector.hpp"
 #include "filter/ddfilter.hpp"
-#include "utils/global_map.hpp"
+#include "atlas/atlas.hpp"
+#include <time.h>
 
 class RSTracker {
 	public:
@@ -33,7 +34,7 @@ class RSTracker {
 		/**
 		 * Add World Map
 		 */
-		void addWorldMap(GlobalMap* map);
+		void addWorldMap(Atlas* map);
 
 
 		/**
@@ -52,6 +53,16 @@ class RSTracker {
 		 * Stop tracking
 		 */
 		bool stop_tracking();
+
+		/**
+		 * Start Flow Thread
+		 */
+		void start_flow();
+
+		/**
+		 * Stop Flow Thread
+		 */
+		void stop_flow();
 
 		/**
 		 * Check if the tracker is set up with the arucos
@@ -101,7 +112,7 @@ class RSTracker {
 		/**
 		 * World Map reference
 		 */
-		GlobalMap* _world_map;
+		Atlas* _world_map;
 
 		/**
 		 * Runnable with the tracking routine
@@ -112,6 +123,15 @@ class RSTracker {
 		 * Autosetting routine
 		 */
 		void autoSetWorldReference();
+
+		/**
+		 * Thread
+		 */
+		bool _flow_thread_active;
+		bool _flowActive;	
+		void opticalflow_runnable();
+		std::thread _flow_thread;
+		timespec opt_flow_period;
 
 		std::thread _trk_thread;
 

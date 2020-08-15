@@ -10,6 +10,12 @@
 RSTracker::RSTracker(DeviceInterface* pdev) {
 	_pdev = pdev;
 
+	_flow_thread_active = false;
+	_flowActive = false;;
+
+	opt_flow_period.tv_nsec = 200 * 1e6; // ms
+	opt_flow_period.tv_sec = 0;
+
 	// Create the tracker class
 	_ptrk = new MMTracker;
 	_ptrk->setDepthScale(_pdev->getDevConfig().depth_scale);
@@ -24,6 +30,12 @@ RSTracker::RSTracker(DeviceInterface* pdev) {
 }
 
 RSTracker::~RSTracker() {
+	stop_flow();
+	_flow_thread_active = false;
+	if (_flow_thread.joinable()) {
+		_flow_thread.join();
+		std::cout << "Stopped optical flow thread!" << std::endl;
+	}
 	_outfile.close();
 }
 
@@ -43,9 +55,12 @@ bool RSTracker::stop_tracking() {
 	_pdev->stopDevice(true);
 }
 
-void RSTracker::addWorldMap(GlobalMap* map) {
+void RSTracker::stop_flow() {
+	_flowActive = false;
+}
+
+void RSTracker::addWorldMap(Atlas* map) {
 	_world_map = map;	
-	_ptrk->addWorldMap(map);
 }
 
 void RSTracker::start_device(int operation, std::string fname) {
@@ -109,6 +124,15 @@ bool RSTracker::start_tracking() {
 	return true;
 }
 
+void RSTracker::start_flow() {
+	_flowActive = true;
+
+	if (_flow_thread_active)
+		return;
+
+	_flow_thread_active = true;
+	_flow_thread = std::thread(&RSTracker::opticalflow_runnable, this);
+}
 
 MMTracker* RSTracker::getMMTracker() {
 	return _ptrk;
@@ -130,15 +154,12 @@ void RSTracker::track_runnable() {
 
 	cv::Mat cvRGB, cvDepth;
 	cv::Mat cvFrameDepth;	
-	std::array<float, 3> pos;
+	Eigen::Vector3d pos;
 	Eigen::Vector3d W_t = Eigen::Vector3d::Zero();
-
-	std::cout << "Activating Flow Thread!" << std::endl;
-	_ptrk->start_flow();
 
 	while (!_shutting_down) {
 		// This runnable is synchronized on the arrival of new frame
-		_pdev->synchronize();	
+		_pdev->synchronize();
 
 		clock_gettime(CLOCK_MONOTONIC, &t_now);
 		dt = (timespec2micro(&t_now) - timespec2micro(&t_old)) / 1e6;
@@ -188,5 +209,71 @@ void RSTracker::track_runnable() {
 		_outfile << est_v(0) << " " << est_v(1) << " " << est_v(2);
 		_outfile << std::endl;
 	}
-	_ptrk->stop_flow();
+}
+
+
+
+void RSTracker::opticalflow_runnable() {
+	
+	uint64_t T_us = timespec2micro(&opt_flow_period);
+
+	// Should add a setup function to control the 
+	// optical flow algorithm parameters.
+	/*
+	double pyr_scale = 0.5;
+	int levels = 2;
+	int winsize = 20;
+	int niters = 2;
+	int poly_n = 20;
+	double poly_sigma = poly_n * 0.2;
+	int flags = 0;
+
+	_ptrk->setup_flow();
+	*/
+	timespec nextAct;
+	cv::Mat cvFrame;
+
+	clock_gettime(CLOCK_MONOTONIC, &nextAct);
+	cv::Mat cFrame;
+	while (_flow_thread_active) {
+		// Compute the next activation
+		add_timespec(&nextAct, &opt_flow_period, &nextAct);
+
+		_pdev->synchronize();
+		_pdev->get_rgb(cvFrame);
+
+		// Optical Flow Step
+		std::vector<TargetData> untracked_points;
+		_ptrk->optical_flow_step(cvFrame, untracked_points);
+
+		// The step should tell me if there are untracked movements
+		// Let's assume I have vector of positions
+		
+		// Check in the global map if there is something there
+		std::vector<AtlasItem> atlas_items;
+		_world_map->get_items(atlas_items);
+
+		for (auto dtc_p : untracked_points) {
+			// Compute the Word Frame position of the
+			// identified point.
+			Eigen::Vector3d W_t = (_aruco_map[0].q_CM_.inverse() *
+				 (dtc_p.b_tg - _aruco_map[0].C_p_CM_));
+
+			for (auto el : atlas_items) {
+				double dist = (el.pos - W_t).norm();
+				if (dist < 0.2) {
+					std::cout << "Locking new target [" <<
+						el.id << "]!" << std::endl;
+					_ptrk->add_target(el.id, dtc_p.roi);
+				} else {
+					std::cout << "Not a good match" << std::endl;
+					std::cout << el.pos.transpose() << std::endl;
+					std::cout << W_t.transpose() << std::endl;
+				}
+			}
+		}
+		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,  &nextAct, NULL);
+	}
+
+	std::cout << "Terminating FlowThread!" << std::endl;
 }

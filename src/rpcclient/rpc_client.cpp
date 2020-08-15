@@ -23,7 +23,8 @@ void RPCClient::send_data(RpcData data) {
 
 void RPCClient::get_worldmap(RpcData_v& vdata) {
 	// Ask for data
-	vdata = pclient->call("get_data").as<RpcData_v>();
+	int i = 0;
+	vdata = pclient->call("get_data", i).as<RpcData_v>();
 }
 
 bool RPCClient::sync() {

@@ -14,54 +14,35 @@ MMTracker::MMTracker() {
 	_delta_depth_param = 5.0;
 
 	opt_tracker = cv::TrackerCSRT::create();
-
-	_flow_thread_active = false;
-	_flowActive = false;;
-
+	
 	_min_flow_threshold = 0.6;
 	_min_flow_threshold_norm = 0.7;
 
 	_opt_flow_scale = 0.5;
 	_opt_flow_detect_thr = 150.0;
-
-	opt_flow_period.tv_nsec = 200 * 1e6; // ms
-	opt_flow_period.tv_sec = 0;
+	
+	pyr_scale = 0.5;
+	levels = 2;
+	winsize = 20;
+	niters = 2;
+	poly_n = 20;
+	poly_sigma = poly_n * 0.2;
+	flags = 0;
 
 	_log_flow.open("trk_flow_log.csv");
+	_log_flow << "time[us] min_flow max_flow Npix" << std::endl;
+
 	_log_trk.open("trk_log.csv");
 }
 
 
 MMTracker::~MMTracker() {
-	stop_flow();
-	_flow_thread_active = false;
-	if (_flow_thread.joinable()) {
-		_flow_thread.join();
-		std::cout << "Stopped optical flow thread!" << std::endl;
-	}
-
 	_log_flow.close();
 	_log_trk.close();
 
 	for (auto el : _targets) {
 		delete el.second;
 	}
-}
-
-
-void MMTracker::start_flow() {
-	_flowActive = true;
-
-	if (_flow_thread_active)
-		return;
-
-	_flow_thread_active = true;
-	_flow_thread = std::thread(&MMTracker::opticalflow_runnable, this);
-}
-
-
-void MMTracker::stop_flow() {
-	_flowActive = false;
 }
 
 
@@ -80,26 +61,21 @@ void MMTracker::set_flow_thr(double thr, double norm_thr) {
 	_min_flow_threshold_norm = norm_thr;
 }
 
-
-void MMTracker::addWorldMap(GlobalMap* sm) {
-	_wm = sm;
-}
-
 void MMTracker::add_target(int id, cv::Rect2d roi) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		std::cout << "Adding new target: ID[" << id << "]" << std::endl;
-		TargetData* p_td = new TargetData();
-
-		p_td->roi = roi;
-		opt_tracker->init(cvFrame, roi);
-
 		std::cout << "ROI = " << roi << std::endl;
+
+		TargetData* p_td = new TargetData();
+		p_td->roi = roi;
 		_targets.insert(std::pair<int, TargetData*>(id, p_td));
+
+		//opt_tracker->init(cvFrame, roi);
 	} else {
 		std::cout << "Updating target: ID[" << id << "]" << std::endl;
 		_targets[id]->roi = roi;
-		opt_tracker->init(cvFrame, roi);
+		//opt_tracker->init(cvFrame, roi);
 	}
 }
 
@@ -243,6 +219,7 @@ int MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 
 			// If the depth measurement was not valid remove the 
 			// target from the local map of the tracked vehicles.
+			delete el_it->second;
 			el_it = _targets.erase(el_it);
 		}
 	}
@@ -298,7 +275,7 @@ bool MMTracker::get_img_tg(int id, cv::Point& tg) {
 	}
 }
 
-bool MMTracker::get_b_tg(int id, std::array<float, 3>& tg) {
+bool MMTracker::get_b_tg(int id, Eigen::Vector3d& tg) {
 	std::unique_lock<std::mutex> lk(_mx);
 	if (_targets.count(id) == 0) {
 		//std::cout << "No target with ID = " << id << std::endl;
@@ -586,29 +563,11 @@ int MMTracker::find_target_depth(
 }
 
 
-void MMTracker::opticalflow_runnable() {
-	double pyr_scale = 0.5;
-	int levels = 2;
-	int winsize = 20;
-	int niters = 2;
-	int poly_n = 20;
-	double poly_sigma = poly_n * 0.2;
-	int flags = 0;
-
-	uint64_t T_us = timespec2micro(&opt_flow_period);
-
+void MMTracker::optical_flow_step(cv::Mat& cvFrame,
+		std::vector<TargetData>& untracked) {
 	cv::Mat flow;
-	cv::Mat magnitude, angle, magn_norm;
-	cv::Mat cvPrev, cvNext;
-	cv::Mat bgr;
-
-	timespec nextAct;
-	timespec temp;	
-
-	_log_flow << "time[us] min_flow max_flow Npix" << std::endl;
-
-	// Wait to have a valid Frame
-	while (cvFrame.empty()) {}
+	cv::Mat cvNext;
+	timespec temp;
 
 	_frame_height = cvFrame.rows;
 	_frame_width = cvFrame.cols;
@@ -616,176 +575,139 @@ void MMTracker::opticalflow_runnable() {
 	int flow_height = _frame_height * _opt_flow_scale;
 	int flow_width = _frame_width * _opt_flow_scale;
 
-	clock_gettime(CLOCK_MONOTONIC, &nextAct);
-	while (_flow_thread_active) {
-		// Compute the next activation
-		add_timespec(&nextAct, &opt_flow_period, &nextAct);
+	cv::resize(cvFrame, cvNext, cv::Size(),
+			_opt_flow_scale, _opt_flow_scale, cv::INTER_LINEAR);
 
-		// In order to reduce the computational load I resize the image.
-		_mx.lock();
-		cv::resize(cvFrame, cvNext, cv::Size(),
-				_opt_flow_scale, _opt_flow_scale, cv::INTER_LINEAR);
-		_mx.unlock();
+	// Convert the image to gray and prepare the flow Mat
+	// The flow is composed by two matrices where each channel is 
+	// a coordinate (x, y)
+	cv::cvtColor(cvNext, cvNext, cv::COLOR_RGB2GRAY);
+	if (!cvPrev.empty()) {
+		clock_gettime(CLOCK_MONOTONIC, &temp);
+		cv::calcOpticalFlowFarneback(cvPrev, cvNext, flow, 
+				pyr_scale, levels,
+				winsize, niters,
+				poly_n, poly_sigma, flags);  
 
-		// Convert the image to gray and prepare the flow Mat
-		// The flow is composed by two matrices where each channel is 
-		// a coordinate (x, y)
-		cv::cvtColor(cvNext, cvNext, cv::COLOR_RGB2GRAY);
-		if (!cvPrev.empty() && _flowActive) {
-			clock_gettime(CLOCK_MONOTONIC, &temp);
-			cv::calcOpticalFlowFarneback(cvPrev, cvNext, flow, 
-					pyr_scale, levels,
-					winsize, niters,
-					poly_n, poly_sigma, flags);  
+		cv::Mat flowParts[2];
 
-			cv::Mat flowParts[2];
+		cv::split(flow, flowParts);
+		cv::cartToPolar(flowParts[0], flowParts[1],
+				magnitude, angle, true);
 
-			cv::split(flow, flowParts);
-			cv::cartToPolar(flowParts[0], flowParts[1],
-					magnitude, angle, true);
+		double max, min;
+		cv::minMaxLoc(magnitude, &min, &max);
 
-			double max, min;
-			cv::minMaxLoc(magnitude, &min, &max);
-			
-			// Thresholding the flow to remove noise.
-			cv::Mat magn_thr;
-			cv::threshold(magnitude, magn_thr, _min_flow_threshold,
-					0, cv::THRESH_TOZERO);
-			// Normalizing
-			cv::normalize(magn_thr, magn_norm, 0.0f, 1.0f,
-					cv::NORM_MINMAX);
-			angle *= ((1.f / 360.f) * (180.f / 255.f));
+		// Thresholding the flow to remove noise.
+		cv::Mat magn_thr;
+		cv::threshold(magnitude, magn_thr, _min_flow_threshold,
+				0, cv::THRESH_TOZERO);
+		// Normalizing
+		cv::normalize(magn_thr, magn_norm, 0.0f, 1.0f,
+				cv::NORM_MINMAX);
+		angle *= ((1.f / 360.f) * (180.f / 255.f));
 
-			cv::Mat flow_mask;
-			cv::Mat nonzero_pix;
-			
-			// Select the part with a noticeable movement
-			cv::threshold(magn_norm, flow_mask,
-					_min_flow_threshold_norm, 1.0, cv::THRESH_BINARY);
-			cv::findNonZero(flow_mask, nonzero_pix); 
-			nonzero_pix.convertTo(nonzero_pix, CV_32FC2, 1, 0);
+		cv::Mat flow_mask;
+		cv::Mat nonzero_pix;
+		// Select the part with a noticeable movement
+		cv::threshold(magn_norm, flow_mask,
+				_min_flow_threshold_norm, 1.0, cv::THRESH_BINARY);
+		cv::findNonZero(flow_mask, nonzero_pix); 
+		nonzero_pix.convertTo(nonzero_pix, CV_32FC2, 1, 0);
 
-			if (!flow_mask.empty()) {
-				_flow_mask = flow_mask;
-			}
+		if (!flow_mask.empty()) {
+			_flow_mask = flow_mask;
+		}
 
-			int Npix = nonzero_pix.total();
-			_log_flow << timespec2micro(&temp) << " " << min <<
-						" " << max << " " << Npix << std::endl;
-			if (Npix > _opt_flow_detect_thr) {
-				int ks = std::min(_MaxTargets, Npix);
-				int attempts = 2;
-				cv::Mat centers;
-				cv::Mat labels;
-				double err = 0.5;
+		int Npix = nonzero_pix.total();
+		_log_flow << timespec2micro(&temp) << " " << min <<
+			" " << max << " " << Npix << std::endl;
+		if (Npix > _opt_flow_detect_thr) {
+			int ks = std::min(_MaxTargets, Npix);
+			int attempts = 2;
+			cv::Mat centers;
+			cv::Mat labels;
+			double err = 0.5;
 
-				double perf = cv::kmeans(nonzero_pix, ks, labels,
-						cv::TermCriteria(cv::TermCriteria::EPS +
-							cv::TermCriteria::COUNT, 50, err),
-						attempts, cv::KMEANS_PP_CENTERS, centers);
-					
-				centers = centers / _opt_flow_scale;
-				
-				// Check if the movement is associated to a point
-				// which is already tracked
-				//
-				//
-				for (int i = 0; i < ks; i++) {
-					cv::Mat mask = (labels == i);
-					double area = cv::sum(mask)[0];	
+			double perf = cv::kmeans(nonzero_pix, ks, labels,
+					cv::TermCriteria(cv::TermCriteria::EPS +
+						cv::TermCriteria::COUNT, 50, err),
+					attempts, cv::KMEANS_PP_CENTERS, centers);
 
-					if (area > _opt_flow_detect_thr) {	
-						bool newroi = true;
-						cv::Point p(centers.row(i));
-						//std::cout << "Point = " << p << std::endl;
+			centers = centers / _opt_flow_scale;
 
-						// LOCK
-						std::unique_lock<std::mutex> lk(_mx);
-						for (auto el : _targets) {
-							//std::cout << el.second->roi << std::endl;
-							cv::Rect2d roi = el.second->roi;
-							if (!roi.empty() && roi.contains(p)) {
-								//std::cout << "Already tracked" << std::endl;
-								newroi = false;	
-							}	
-						}
-						lk.unlock();
-						// UNLOCK
+			// Check if the movement is associated to a point
+			// which is already tracked
+			for (int i = 0; i < ks; i++) {
+				cv::Mat mask = (labels == i);
+				double area = cv::sum(mask)[0];	
 
-						if (newroi) {
-							// Define a ROI in the area of the movement
-							int base_x = p.x - 40;
-							int base_y = p.y - 40;
+				if (area > _opt_flow_detect_thr) {
+					bool newroi = true;
+					cv::Point p(centers.row(i));
 
-							int roix = std::max(0,
-									std::min(base_x, _frame_width - 80)
-									);
-							int roiy = std::max(0,
-									std::min(base_y, _frame_height - 80)
-									);
+					// LOCK
+					std::unique_lock<std::mutex> lk(_mx);
+					for (auto el : _targets) {
+						//std::cout << el.second->roi << std::endl;
+						cv::Rect2d roi = el.second->roi;
+						if (!roi.empty() && roi.contains(p)) {
+							//std::cout << "Already tracked" << std::endl;
+							newroi = false;	
+						}	
+					}
+					lk.unlock();
+					// UNLOCK
 
-							cv::Rect2d tgroi(roix, roiy, 80, 80);
-							Eigen::Vector3d pos_;
+					if (newroi) {
+						// Define a ROI in the area of the movement
+						int base_x = p.x - 40;
+						int base_y = p.y - 40;
 
-							// Try to identify a target postion in the ROI
-							find_target_in_roi(pos_, tgroi);
+						int roix = std::max(0,
+								std::min(base_x, _frame_width - 80)
+								);
+						int roiy = std::max(0,
+								std::min(base_y, _frame_height - 80)
+								);
 
-							// Compute the Word Frame position of the identified point.
-							Eigen::Vector3d W_t = (q_CM_.inverse() * (pos_ - C_p_CM_));
+						cv::Rect2d tgroi(roix, roiy, 80, 80);
+						Eigen::Vector3d pos_;
 
-							// Check in the global map if there is something there
-							std::unordered_map<int, MapItem> local_map_copy = _wm->getMap();
-							for (auto el : local_map_copy) {
-								double dist = (el.second.pos - W_t).norm();
-								if (dist < 0.9) {
-									std::cout << "Locking new target [" << el.first << "]" <<
-										"@ x = " << p.x << " y = " << p.y <<
-										std::endl << tgroi << std::endl << std::endl;
+						// Try to identify a target postion in the ROI
+						find_target_in_roi(pos_, tgroi);
 
-									TargetData* p_td = new TargetData();
+						TargetData untrk_item;
+						untrk_item.b_tg = pos_;
+						untrk_item.roi = tgroi;
 
-									p_td->roi = tgroi;
-									lk.lock();
-									_targets.insert(std::pair<int, TargetData*>(el.first, p_td));
-									lk.unlock();
-									break;
-								} else {
-									std::cout << "Not a good match" << std::endl;
-									std::cout << el.second.pos.transpose() << std::endl;
-									std::cout << W_t.transpose() << std::endl;
-								}
-							}
-							
-						}
+						untracked.push_back(untrk_item);
 					}
 				}
 			}
-
-			//build hsv image
-			cv::Mat _hsv[3], hsv, hsv8;
-			_hsv[0] = angle;
-			_hsv[1] = cv::Mat::ones(angle.size(), CV_32F);
-			_hsv[2] = magn_norm;
-
-			cv::merge(_hsv, 3, hsv);
-			hsv.convertTo(hsv8, CV_8U, 255.0);
-			cv::cvtColor(hsv8, bgr, cv::COLOR_HSV2BGR);
-
-			// Save video to file
-			/*
-			if (!bgr.empty()) {
-				cv::Mat out;
-				cv::cvtColor(bgr, out, cv::COLOR_BGR2RGB);
-			}
-			*/
 		}
 
-		cvPrev = cvNext;
-		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,  &nextAct, NULL);
-	}
+		/*
+		//build hsv image
+		cv::Mat _hsv[3], hsv, hsv8;
+		_hsv[0] = angle;
+		_hsv[1] = cv::Mat::ones(angle.size(), CV_32F);
+		_hsv[2] = magn_norm;
 
-	std::cout << "Terminating FlowThread!" << std::endl;
+		cv::merge(_hsv, 3, hsv);
+		hsv.convertTo(hsv8, CV_8U, 255.0);
+		cv::cvtColor(hsv8, bgr, cv::COLOR_HSV2BGR);
+
+		// Save video to file
+		   if (!bgr.empty()) {
+		   cv::Mat out;
+		   cv::cvtColor(bgr, out, cv::COLOR_BGR2RGB);
+		   }
+		*/
+	}
+	cvPrev = cvNext;
 }
+
 
 void MMTracker::computeHist(cv::Mat& hist, int numBins,
 		const cv::Mat& data, double scale) {

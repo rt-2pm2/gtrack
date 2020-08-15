@@ -1,3 +1,6 @@
+#ifndef _RPC_CLIENT_HPP_
+#define _RPC_CLIENT_HPP_
+
 #include "rpc/client.h"
 #include <iostream>
 #include <string>
@@ -21,3 +24,5 @@ class RPCClient {
 
 		rpc::client* pclient;
 };
+
+#endif

@@ -12,16 +12,13 @@
 #include "arucodetector/arucodetector.hpp"
 #include "devinterface/devinterface.hpp"
 #include "rstracker/rstracker.hpp"
+#include "atlas/atlas.hpp"
 
 #include "filter/ddfilter.hpp"
 #include "utils/timelib.hpp"
 #include "utils/utils.hpp"
-#include "utils/global_map.hpp"
 
 #include <dirent.h>
-
-#include "rpcclient/rpc_client.hpp"
-
 
 
 #define ARUCO_DEBUG
@@ -30,16 +27,15 @@
 
 using namespace std;
 
+bool should_end = false;
+
 int _WIDTH = 848;
 int _HEIGHT = 480;
 int _FPS = 30;
 double _DEPTH_SCALE = 0.0001;
 
 std::string ip("localhost");
-RPCClient client(ip, 8080);
-
-bool should_end = false;
-GlobalMap wmap;
+Atlas wmap(ip, 8080);
 
 static int name_filter(const struct dirent* dir_ent) {
     if (!strcmp(dir_ent->d_name, ".") || !strcmp(dir_ent->d_name, "..")) return 0;
@@ -67,24 +63,6 @@ int search_bags(const std::string path, std::vector<std::string>& v_names) {
 }
 
 
-void external_sync() {
-	timespec t_now;
-
-	while(!should_end) {
-		RpcData_v worlddata;
-		client.get_worldmap(worlddata);
-
-		clock_gettime(CLOCK_MONOTONIC, &t_now);
-		for (auto el : worlddata.data) {
-			wmap.add_target_data(el.id,
-					Eigen::Vector3d(el.xx, el.yy, el.zz),
-					Eigen::Vector3d::Zero(),
-					timespec2micro(&t_now));
-		}
-		std::this_thread::sleep_for(1s);
-	}
-}
-
 
 int main(int argc, char* argv[]) {
 	int key = 49;
@@ -100,11 +78,6 @@ int main(int argc, char* argv[]) {
 	int operation = RSTRK_ONLINE;
 	int option;
 
-
-	client.sync();
-
-	
-	std::thread world_thread(external_sync);
 
 	/**
 	 * Parse options
@@ -364,7 +337,7 @@ int main(int argc, char* argv[]) {
 			cv::Rect2d roi;
 			trk->get_ROI(0, roi);
 
-			std::array<float, 3> pos;
+			Eigen::Vector3d pos;
 			trk->get_b_tg(0, pos);
 			Eigen::Vector3d pos_(pos[0], pos[1], pos[2]);
 
@@ -439,8 +412,6 @@ int main(int argc, char* argv[]) {
 			data.xx = W_p(0);
 			data.yy = W_p(1);
 			data.zz = W_p(2);
-
-			client.send_data(data);
 		}
 		
 	}
@@ -453,8 +424,6 @@ int main(int argc, char* argv[]) {
 	for (auto el : ptrackers) {
 		el->stop_tracking();
 	}
-
-	world_thread.join();
 
 	cout << "Terminating..." << endl;
 	cv::waitKey(5000);

@@ -184,6 +184,7 @@ int main(int argc, char* argv[]) {
 			// Start the acquisitioa(not the tracking)
 			ptrk->start_device(operation, bagfile);
 			ptrk->start_tracking();
+			ptrk->start_flow();
 		}
 	} else {
 		auto devlist = ctx.query_devices();
@@ -204,6 +205,7 @@ int main(int argc, char* argv[]) {
 			// Start the acquisitioa(not the tracking)
 			ptrk->start_device(operation, filename);
 			ptrk->start_tracking();
+			ptrk->start_flow();
 		}
 	}
 

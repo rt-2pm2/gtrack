@@ -184,30 +184,26 @@ void RSTracker::track_runnable() {
 			num_detect = _ptrk->step(cvRGB, cvDepth);
 
 			if (num_detect > 0) {
-				_ptrk->get_b_tg(0, pos);
-				_pfilt->prediction(0.04);
+				std::vector<TargetData> targets;
+				_ptrk->get_targets(targets);
 
-				for (int i = 0; i < 3; i++) {
-					pos_(i) = pos[i];
+				for(auto tg : targets) {
+					Eigen::Vector3d pos_ = tg.b_tg;	
+					W_t = (_aruco_map[0].q_CM_.inverse() *
+							(pos_ - _aruco_map[0].C_p_CM_));
+
+					_world_map->add_target_data(tg.id,
+							W_t,
+							Eigen::Vector3d::Zero(),
+							timespec2micro(&t_now));
+
+					_outfile << timespec2micro(&t_now) << " " << tg.id << " ";
+					_outfile << W_t(0) << " " << W_t(1) << " " << W_t(2) << " ";
+					_outfile << pos_(0) << " " << pos_(1) << " " << pos_(2) << " ";
+					_outfile << std::endl;
 				}
-				_pfilt->update(pos_);
 			}
 		}
-		Eigen::Vector3d est_p = _pfilt->getPos();
-		Eigen::Vector3d est_v = _pfilt->getVel();
-
-		// Compute the position of the target w.r.t the World Frame	
-		if (num_detect > 0) {
-			W_t = (_aruco_map[0].q_CM_.inverse() *
-					(pos_ - _aruco_map[0].C_p_CM_));
-
-			_world_map->add_target_data(0, W_t, Eigen::Vector3d::Zero(), timespec2micro(&t_now));
-		}
-		_outfile << timespec2micro(&t_now) << " ";
-		_outfile << W_t(0) << " " << W_t(1) << " " << W_t(2) << " ";
-		_outfile << est_p(0) << " " << est_p(1) << " " << est_p(2) << " ";
-		_outfile << est_v(0) << " " << est_v(1) << " " << est_v(2);
-		_outfile << std::endl;
 	}
 }
 

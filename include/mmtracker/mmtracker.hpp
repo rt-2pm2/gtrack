@@ -35,6 +35,11 @@
  */
 struct TargetData {
 	/**
+	 * ID
+	 */
+	int id;
+
+	/**
 	 * Pixel coordinate of the target.
 	 */
 	cv::Point img_target;
@@ -148,6 +153,11 @@ class MMTracker {
 		void get_histogram(cv::Mat& hist_img, int numBins,
 				const cv::Mat& depth_roi, int target_depth);
 
+		/**
+		 * Get the list of targets tracked by the camera
+		 */
+		int get_targets(std::vector<TargetData>& T);
+
 	private:
 
 		/**
@@ -224,8 +234,7 @@ class MMTracker {
 
 		void find_target_in_roi(Eigen::Vector3d& b_tg,
 				const cv::Rect2d& roi);
-
-
+	
 		/**
 		 * Delta Depth used to select the pixel 
 		 * associated to the target in the depth image.

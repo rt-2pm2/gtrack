@@ -68,6 +68,7 @@ void MMTracker::add_target(int id, cv::Rect2d roi) {
 		std::cout << "ROI = " << roi << std::endl;
 
 		TargetData* p_td = new TargetData();
+		p_td->id = id;
 		p_td->roi = roi;
 		_targets.insert(std::pair<int, TargetData*>(id, p_td));
 
@@ -263,6 +264,18 @@ bool MMTracker::get_flowmask(int id, cv::Mat& m) {
 		return true;
 	}
 }
+
+
+int MMTracker::get_targets(std::vector<TargetData>& T) {
+	std::lock_guard<std::mutex> lk(_mx);
+	int count = 0;
+	for (auto el : _targets) {
+		T.push_back(*el.second);
+		count++;
+	}
+	return count;
+}
+
 
 bool MMTracker::get_img_tg(int id, cv::Point& tg) {
 	std::unique_lock<std::mutex> lk(_mx);

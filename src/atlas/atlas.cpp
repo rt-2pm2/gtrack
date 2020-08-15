@@ -86,16 +86,20 @@ bool Atlas::get_target_data(
 
 int Atlas::get_items(std::vector<AtlasItem>& vout) {
 	std::lock_guard<std::mutex> {_mx};
+	// Download the full map and update the elements
 	if (client) {
 		RpcData_v worlddata;
 		client->get_worldmap(worlddata);
 		for (auto el : worlddata.data) {
 			if (_data.count(el.id) == 0) {
 				AtlasItem ptg;
+				ptg.id = el.id;
 				ptg.pos = Eigen::Vector3d(el.xx, el.yy, el.zz);
 				ptg.vel = Eigen::Vector3d::Zero();
 				ptg.timestamp = 0;
 				_data.insert(std::pair<int, AtlasItem>(el.id, ptg));
+			} else {
+				_data[el.id].pos = Eigen::Vector3d(el.xx, el.yy, el.zz);
 			}
 		}
 	}

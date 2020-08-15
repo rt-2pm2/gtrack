@@ -3,7 +3,6 @@
 
 #include "rpc/msgpack.hpp"
 
-
 struct RpcData {
 	// Timestamp
 	uint64_t t;

@@ -27,6 +27,8 @@
 
 using namespace std;
 
+int selected_vehicle = 3;
+
 bool should_end = false;
 
 int _WIDTH = 848;
@@ -334,26 +336,28 @@ int main(int argc, char* argv[]) {
 #endif
 
 			cv::Point tg;
-			trk->get_img_tg(0, tg);
+			trk->get_img_tg(selected_vehicle, tg);
 
 			cv::Rect2d roi;
-			trk->get_ROI(0, roi);
+			trk->get_ROI(selected_vehicle, roi);
 
 			Eigen::Vector3d pos;
-			trk->get_b_tg(0, pos);
+			trk->get_b_tg(selected_vehicle, pos);
 			Eigen::Vector3d pos_(pos[0], pos[1], pos[2]);
 
+			/*
 			Eigen::Vector3d est_p = ddfil->getPos();
 			Eigen::Vector3d est_v = ddfil->getVel();
+			*/
 
 #ifdef MASK_DEBUG
 			cv::Mat mask;
-			trk->get_mask(0, mask);
+			trk->get_mask(selected_vehicle, mask);
 			if (!mask.empty())
 				cv::imshow("Mask", mask);
 
 			cv::Mat fl_mask;
-			trk->get_flowmask(0, fl_mask);
+			trk->get_flowmask(selected_vehicle, fl_mask);
 			if (!fl_mask.empty())
 				imshow("Flow", fl_mask);
 #endif
@@ -373,11 +377,13 @@ int main(int argc, char* argv[]) {
 
 			// =====================================================
 			// Visualization =======================================
+			/*
 			cv::Point kf_pt;
 			cv::Point dd_pt;
 			trk->position2pixel(dd_pt, est_p);
+			*/
 
-			cv::circle(outputImage, dd_pt, 10, cv::Scalar(0, 0, 255), 2);
+			//cv::circle(outputImage, dd_pt, 10, cv::Scalar(0, 0, 255), 2);
 			cv::circle(outputImage, tg, 15, cv::Scalar(0, 255, 0), 2);
 			cv::rectangle(outputImage, roi, cv::Scalar(0, 0, 255), 2, 1);
 			//cout << "Main DT = " << dt << endl;
@@ -397,25 +403,6 @@ int main(int argc, char* argv[]) {
 		*/	
 		}
 
-
-		// Stream the information about the global map
-		for (auto el : wmap.getMap()) {
-			Eigen::Vector3d W_p(Eigen::Vector3d::Zero());
-			Eigen::Vector3d W_v(Eigen::Vector3d::Zero());
-
-			uint64_t stamp;
-			wmap.get_target_data(0, W_p, W_v, &stamp);
-			_outfile << stamp << " " << W_p(0) <<
-				" " << W_p(1) << " " << W_p(2) << endl;
-
-			RpcData data;
-			data.t = stamp;
-			data.id = 0;
-			data.xx = W_p(0);
-			data.yy = W_p(1);
-			data.zz = W_p(2);
-		}
-		
 	}
 	
 	should_end = true;

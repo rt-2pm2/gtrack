@@ -7,7 +7,7 @@ RPCClient::RPCClient(std::string ip, int port) :
 	_server_ip(ip) {
 	_server_port = port;
 
-    pclient->set_timeout(1); 
+    pclient->set_timeout(50); 
 }
 
 

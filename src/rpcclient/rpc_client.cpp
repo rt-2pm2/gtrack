@@ -24,7 +24,11 @@ void RPCClient::send_data(RpcData data) {
 void RPCClient::get_worldmap(RpcData_v& vdata) {
 	// Ask for data
 	int i = 0;
-	vdata = pclient->call("get_data", i).as<RpcData_v>();
+	try {
+		vdata = pclient->call("get_data", i).as<RpcData_v>();
+	} catch (rpc::timeout &t) {
+        std::cout << t.what() << std::endl;
+    }
 }
 
 bool RPCClient::sync() {

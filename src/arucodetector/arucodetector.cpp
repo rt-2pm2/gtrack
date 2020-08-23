@@ -120,9 +120,6 @@ int ArucoDetector::generateMap(const DetectionData& dd,
 		Eigen::Vector3d rv;
 		Eigen::Quaterniond q_CM; // Marker orientation w.r.t. Camera frame
 
-		Eigen::Vector3d W_p_WM; // World to marker in world frame
-		Eigen::Quaterniond q_WM; // Marker orientation w.r.t. World frame
-
 		// Convert the position to eigen format
 		ocv2eig(dd.tvecs_[i], C_p_CM);
 

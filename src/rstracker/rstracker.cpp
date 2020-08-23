@@ -102,6 +102,23 @@ void RSTracker::autoSetWorldReference() {
 
 	}
 
+	// Create the transformation pairs
+	std::vector<int> aruco_ids;
+	for (auto& el : aruco_map) {
+		aruco_ids.push_back(el.first);
+	}
+
+	for (int i = 0; i < Ndetected; i++) {
+		for (int j = i + 1; j < Ndetected; j++) {
+			// Compute the transformation between arucos
+			Eigen::Quaterniond q_ij = aruco_map[i].q_CM_.inverse() * aruco_map[j].q_CM_;
+			Eigen::Vector3d v_ij = 
+				aruco_map[i].q_CM_.inverse() * (aruco_map[j].C_p_CM_ - aruco_map[i].C_p_CM_);
+			// Send the info to the GAtlas
+		}
+	}
+
+	// Consider taking a generic aruco as reference.
 	Eigen::Vector3d campos = _aruco_map[0].q_CM_.inverse() *
 		(-_aruco_map[0].C_p_CM_);
 

@@ -16,6 +16,8 @@ class RPCClient {
 		bool sync();
 
 		void send_data(RpcData map_data);
+		void send_atlas_data(RpcAtlasTrsfData data);
+
 		void get_worldmap(RpcData_v& vdata);
 
 	private:

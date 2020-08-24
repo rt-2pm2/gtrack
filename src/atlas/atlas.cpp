@@ -112,6 +112,25 @@ int Atlas::get_items(std::vector<AtlasItem>& vout) {
 	return counter;
 }
 
+int Atlas::send_map_transform(int id_i, int id_j,
+		Eigen::Vector3d& v_ij, Eigen::Quaterniond& q_ij) {
+
+	RpcAtlasTrsfData data;
+	data.origin = id_i;
+	data.dest = id_j;
+	data.pos = std::vector<double>(3);
+	data.quat = std::vector<double>(4);
+
+	data.quat[0] = q_ij.w();
+	for (int kk = 0; kk < 3; kk++) {
+		data.pos[kk] = v_ij(kk); 
+		data.quat[kk + 1] = q_ij.vec()(kk);
+	}
+
+	client->send_atlas_data(data);
+
+	return 1;
+}
 
 std::unordered_map<int, AtlasItem> Atlas::getMap() {
 	std::lock_guard<std::mutex> {_mx};

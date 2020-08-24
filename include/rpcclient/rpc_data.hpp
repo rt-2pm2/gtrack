@@ -28,4 +28,12 @@ struct RpcData_v {
     MSGPACK_DEFINE_ARRAY(data);
 };
 
+struct RpcAtlasTrsfData {
+	int origin;
+	int dest;
+	std::vector<double> pos;
+	std::vector<double> quat;
+	MSGPACK_DEFINE_ARRAY(origin, dest, pos, quat);
+};
+
 #endif

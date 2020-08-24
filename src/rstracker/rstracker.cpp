@@ -83,52 +83,61 @@ void RSTracker::start_device(int operation, std::string fname) {
 	_pdev->getCameraParam(_cmat, _ddsf);
 	_paruco_detector = new ArucoDetector(_cmat, _ddsf, 0.14, 0);
 
-	std::thread(&RSTracker::autoSetWorldReference, this).detach();
+	std::thread(&RSTracker::autoSetWorldReference, this);
 }
 
 
 void RSTracker::autoSetWorldReference() {
-	int InitCounter = 60;
-	cv::Mat cvFrame;
-	while (InitCounter > 0) {	
+
+	timespec nextAct;
+	timespec thread_period {};
+	thread_period.tv_nsec = 0;
+	thread_period.tv_sec = 1;
+
+	while (!_shutting_down) {
+		
+		clock_gettime(CLOCK_MONOTONIC, &nextAct);
+		add_timespec(&nextAct, &opt_flow_period, &nextAct);
+
+		// Get a frame and detect the arucos
+		cv::Mat cvFrame;
 		_pdev->synchronize();
 		_pdev->get_rgb(cvFrame);
 		int Ndetected = 0;
 		if (!cvFrame.empty()) {
 			Ndetected = _paruco_detector->processImage(
 					_aruco_map, _detect_data, cvFrame, 0);
-			InitCounter--;
 		}
 
-	}
-
-	// Create the transformation pairs
-	std::vector<int> aruco_ids;
-	for (auto& el : aruco_map) {
-		aruco_ids.push_back(el.first);
-	}
-
-	for (int i = 0; i < Ndetected; i++) {
-		for (int j = i + 1; j < Ndetected; j++) {
-			// Compute the transformation between arucos
-			Eigen::Quaterniond q_ij = aruco_map[i].q_CM_.inverse() * aruco_map[j].q_CM_;
-			Eigen::Vector3d v_ij = 
-				aruco_map[i].q_CM_.inverse() * (aruco_map[j].C_p_CM_ - aruco_map[i].C_p_CM_);
-			// Send the info to the GAtlas
+		// Create the transformation pairs
+		std::vector<int> aruco_ids;
+		for (auto& el : aruco_map) {
+			aruco_ids.push_back(el.first);
 		}
+
+		for (int i = 0; i < Ndetected; i++) {
+			for (int j = i + 1; j < Ndetected; j++) {
+				int id_i = aruco_ids[i];
+				int id_j = aruco_ids[j];
+				// Compute the transformation between arucos
+				Eigen::Quaterniond q_ij =
+					aruco_map[id_i].q_CM_.inverse() * aruco_map[id_j].q_CM_;
+
+				Eigen::Vector3d v_ij = 
+					aruco_map[id_i].q_CM_.inverse() *
+					(aruco_map[id_j].C_p_CM_ - aruco_map[id_i].C_p_CM_);
+
+				// Send the info to the GAtlas
+				_world_map->send_map_item(id_i, id_j, v_ij, q_ij);
+			}
+		}
+		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,  &nextAct, NULL);
 	}
 
-	// Consider taking a generic aruco as reference.
-	Eigen::Vector3d campos = _aruco_map[0].q_CM_.inverse() *
-		(-_aruco_map[0].C_p_CM_);
-
-	std::cout << "Camera [" << _pdev->getSerial() << "] Position = " <<
-		campos.transpose() << std::endl;
-
-	_ptrk->set_transform(_aruco_map[0].C_p_CM_,
-			_aruco_map[0].q_CM_);
-	_ready = true;
+	
 }
+
+
 
 bool RSTracker::start_tracking() {
 	// Block until the camera has acquired the refernce
@@ -163,6 +172,21 @@ DetectionData RSTracker::getArucoDetection() {
 	return _detect_data;
 }
 
+void RSTracker::wait_ready() {
+	while (_aruco_map.count(0) == 0) {};
+
+	// Consider taking a generic aruco as reference.
+	Eigen::Vector3d campos = _aruco_map[0].q_CM_.inverse() *
+		(-_aruco_map[0].C_p_CM_);
+
+	std::cout << "Camera [" << _pdev->getSerial() << "] Position = " <<
+		campos.transpose() << std::endl;
+
+	_ptrk->set_transform(_aruco_map[0].C_p_CM_,
+			_aruco_map[0].q_CM_);
+
+	_ready = true;
+}
 
 void RSTracker::track_runnable() {
 	double dt = 0.03;
@@ -174,6 +198,8 @@ void RSTracker::track_runnable() {
 	Eigen::Vector3d pos;
 	Eigen::Vector3d W_t = Eigen::Vector3d::Zero();
 
+	wait_ready() {};
+	
 	while (!_shutting_down) {
 		// This runnable is synchronized on the arrival of new frame
 		_pdev->synchronize();

@@ -48,6 +48,10 @@ class  Atlas {
 
 		int get_items(std::vector<AtlasItem>& vout);
 
+		int send_map_transform(int id_i, int id_j,
+				Eigen::Vector3d& v_ij,
+				Eigen::Quaterniond& q_ij);
+
 		std::unordered_map<int, AtlasItem> getMap();
 
 	private:

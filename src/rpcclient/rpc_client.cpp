@@ -21,6 +21,22 @@ void RPCClient::send_data(RpcData data) {
     }
 }
 
+void RPCClient::send_atlas_data(RpcAtlasTrsfData data) {
+	try {
+		pclient->async_call("add_atlas_trf_data", data);
+	} catch (rpc::timeout &t) {
+        std::cout << t.what() << std::endl;
+    } 
+}
+
+void RPCClient::get_atlas_data(int src, int dst, RpcAtlasTrsfData& data) {
+	try {
+		data = pclient->call("add_atlas_trf_data", src, dst).as<RpcAtlasTrsfData>();
+	} catch (rpc::timeout &t) {
+        std::cout << t.what() << std::endl;
+    } 
+}
+
 void RPCClient::get_worldmap(RpcData_v& vdata) {
 	// Ask for data
 	int i = 0;

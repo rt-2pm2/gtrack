@@ -52,6 +52,9 @@ class  Atlas {
 				Eigen::Vector3d& v_ij,
 				Eigen::Quaterniond& q_ij);
 
+		int get_map_transform(int src, int dst,
+				Eigen::Vector3d& v_ij, Eigen::Quaterniond& q_ij);
+
 		std::unordered_map<int, AtlasItem> getMap();
 
 	private:

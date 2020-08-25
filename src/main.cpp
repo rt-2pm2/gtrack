@@ -36,7 +36,7 @@ int _HEIGHT = 480;
 int _FPS = 30;
 double _DEPTH_SCALE = 0.0001;
 
-std::string ip("localhost");
+std::string ip("127.0.0.1");
 Atlas wmap(ip, 8080);
 
 static int name_filter(const struct dirent* dir_ent) {
@@ -206,8 +206,8 @@ int main(int argc, char* argv[]) {
 
 			// Start the acquisitioa(not the tracking)
 			ptrk->start_device(operation, filename);
-			ptrk->start_tracking();
-			ptrk->start_flow();
+			//ptrk->start_tracking();
+			//ptrk->start_flow();
 		}
 	}
 
@@ -315,23 +315,21 @@ int main(int argc, char* argv[]) {
 			cv::Mat outputImage = cvFrame.clone();
 
 #ifdef ARUCO_DEBUG
-			if (ptrackers[dev_select]->isReady()) {
-				cv::Mat cmat, ddsf;
-				mydev->getCameraParam(cmat, ddsf);
-				DetectionData ddata = 
-					ptrackers[dev_select]->getArucoDetection();
+			cv::Mat cmat, ddsf;
+			mydev->getCameraParam(cmat, ddsf);
+			DetectionData ddata = 
+				ptrackers[dev_select]->getArucoDetection();
 
-				cv::aruco::drawDetectedMarkers(outputImage,
-						ddata.mk_corners_,
-						ddata.mk_ids_);
+			cv::aruco::drawDetectedMarkers(outputImage,
+					ddata.mk_corners_,
+					ddata.mk_ids_);
 
-				for (int i = 0; i < ddata.rvecs_.size(); i++) {
-					cv::aruco::drawAxis(outputImage,
-							cmat, ddsf,
-							ddata.rvecs_[i],
-							ddata.tvecs_[i],
-							0.1);
-				}
+			for (int i = 0; i < ddata.rvecs_.size(); i++) {
+				cv::aruco::drawAxis(outputImage,
+						cmat, ddsf,
+						ddata.rvecs_[i],
+						ddata.tvecs_[i],
+						0.1);
 			}
 #endif
 

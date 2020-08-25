@@ -12,6 +12,7 @@
 #include <fstream>
 #include <opencv2/core.hpp>
 #include <thread>
+#include <mutex>
 
 #include "devinterface/devinterface.hpp"
 #include "mmtracker/mmtracker.hpp"
@@ -70,6 +71,20 @@ class RSTracker {
 		bool isReady();
 
 	private:
+		std::mutex mx;
+
+		/**
+		 * Id of the reference aruco
+		 */
+		int _local_aruco_id;
+		int _global_aruco_ref;
+
+		/**
+		 * Pose of the sensor with respect to the global
+		 * reference.
+		 */
+		Eigen::Vector3d _w_p_wc;
+		Eigen::Quaterniond _w_q_c;
 
 		/**
 		 * Ready flag
@@ -93,7 +108,6 @@ class RSTracker {
 		 */
 		DDFilter* _pfilt;
 
-
 		/**
 		 * Aruco detector class
 		 */
@@ -113,6 +127,12 @@ class RSTracker {
 		 * World Map reference
 		 */
 		Atlas* _world_map;
+
+
+		/**
+		 * Synch Function
+		 */
+		bool wait_ready();
 
 		/**
 		 * Runnable with the tracking routine
@@ -134,6 +154,8 @@ class RSTracker {
 		timespec opt_flow_period;
 
 		std::thread _trk_thread;
+
+		std::thread _atlas_thread;
 
 		bool _shutting_down;
 

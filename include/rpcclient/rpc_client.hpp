@@ -13,13 +13,15 @@ class RPCClient {
 		RPCClient(std::string ip, int port);
 		~RPCClient();
 
+		void reset_connection();
+
 		bool sync();
 
-		void send_data(RpcData map_data);
-		void send_atlas_data(RpcAtlasTrsfData data);
+		bool send_data(RpcData map_data);
+		bool send_atlas_data(RpcAtlasTrsfData data);
 
-		void get_worldmap(RpcData_v& vdata);
-
+		bool get_worldmap(RpcData_v& vdata);
+		bool get_atlas_data(int src, int dst, RpcAtlasTrsfData& data);
 	private:
 		int _server_port;
 		std::string _server_ip;

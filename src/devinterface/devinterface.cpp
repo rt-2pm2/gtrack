@@ -179,7 +179,7 @@ void DeviceInterface::stopDevice(bool wait) {
 	if (wait) {
 		if (conversion_thread.joinable()) {
 			conversion_thread.join();
-			std::cout << "Stopped input thread [" << 
+			std::cout << "Stopped conversion thread [" << 
 				_serial << "]!" << std::endl;
 		}
 

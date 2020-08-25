@@ -115,6 +115,7 @@ int Atlas::get_items(std::vector<AtlasItem>& vout) {
 int Atlas::send_map_transform(int id_i, int id_j,
 		Eigen::Vector3d& v_ij, Eigen::Quaterniond& q_ij) {
 
+	bool out = false;
 	RpcAtlasTrsfData data;
 	data.origin = id_i;
 	data.dest = id_j;
@@ -127,9 +128,29 @@ int Atlas::send_map_transform(int id_i, int id_j,
 		data.quat[kk + 1] = q_ij.vec()(kk);
 	}
 
-	client->send_atlas_data(data);
+	std::cout << "[" << id_i << "-->" << id_j << "]" << std::endl;
+	std::cout << "p = " << v_ij.transpose() << std::endl; 
 
-	return 1;
+	out = client->send_atlas_data(data);
+
+	return out;
+}
+
+int Atlas::get_map_transform(int src, int dst,
+		Eigen::Vector3d& v_ij, Eigen::Quaterniond& q_ij) {
+
+	bool out = false;
+	RpcAtlasTrsfData data;
+	out = client->get_atlas_data(src, dst, data);
+
+	if (data.quat.size() > 0) { 
+		q_ij.w() = data.quat[0];
+		for (int kk = 0; kk < 3; kk++) {
+			v_ij(kk) = data.pos[kk]; 
+			q_ij.vec()(kk) = data.quat[kk + 1];
+		}
+	}
+	return out;
 }
 
 std::unordered_map<int, AtlasItem> Atlas::getMap() {

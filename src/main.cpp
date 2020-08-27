@@ -12,7 +12,7 @@
 #include "arucodetector/arucodetector.hpp"
 #include "devinterface/devinterface.hpp"
 #include "rstracker/rstracker.hpp"
-#include "atlas/atlas.hpp"
+#include "gatlas/gatlas.hpp"
 
 #include "filter/ddfilter.hpp"
 #include "utils/timelib.hpp"
@@ -22,10 +22,11 @@
 
 
 #define ARUCO_DEBUG
-#define HIST_DEBUG
-#define MASK_DEBUG
+//#define HIST_DEBUG
+//#define MASK_DEBUG
 
 using namespace std;
+using namespace mmtracker;
 
 int selected_vehicle = 3;
 
@@ -35,9 +36,6 @@ int _WIDTH = 848;
 int _HEIGHT = 480;
 int _FPS = 30;
 double _DEPTH_SCALE = 0.0001;
-
-std::string ip("127.0.0.1");
-Atlas wmap(ip, 8080);
 
 static int name_filter(const struct dirent* dir_ent) {
     if (!strcmp(dir_ent->d_name, ".") || !strcmp(dir_ent->d_name, "..")) return 0;
@@ -74,6 +72,9 @@ int main(int argc, char* argv[]) {
 	std::string filename("rec_");	
 	std::string config_file("config.json");	
 	std::ofstream _outfile("global.csv");
+	
+	//std::string ip("127.0.0.1");
+	std::string ip {};
 
 	bool playback = false;
 	bool recording = false;
@@ -85,7 +86,7 @@ int main(int argc, char* argv[]) {
 	 * Parse options
 	 * - 'p': playback
 	 */
-	while ((option = getopt(argc, argv, "rpf:")) != -1) {
+	while ((option = getopt(argc, argv, "rpf:s:")) != -1) {
 		switch (option) {
 			case 'r': // Recording
 				recording = true;
@@ -101,12 +102,17 @@ int main(int argc, char* argv[]) {
 				filename = std::string(optarg);
 				cout << "Filename : " << filename << endl;
 				break;
+			case 's': // Server
+				ip = optarg;
+				cout << "Atlas Server @: " << optarg << endl;
 		}
 	}
 
 	if (playback) { cout << " ==== Playback Mode ==== " << endl; }
 	if (recording) { cout << "++++ Recording Active ++++ " << endl; }
-	
+
+	//Atlas wmap(ip, 8080);
+	GAtlas wmap;
 
 	if (file_exist(config_file)) {
 		cout << "Found configuration file!" << endl;
@@ -132,10 +138,6 @@ int main(int argc, char* argv[]) {
 
 	timespec t_now, t_old;
 	clock_gettime(CLOCK_MONOTONIC, &t_now);
-
-	// Initialize the map with my knowledge of the initial 
-	// configuration.
-	
 
 	// =========================================
 	// Realsense Device	
@@ -167,7 +169,6 @@ int main(int argc, char* argv[]) {
 	cout << " ============================= " << endl;
 	cout << " <-.->     Starting      <-.-> " << endl;
 	cout << endl;
-
 
 	if (operation == RSTRK_PLAYBACK) {
 		std::vector<std::string> v_names;
@@ -206,8 +207,10 @@ int main(int argc, char* argv[]) {
 
 			// Start the acquisitioa(not the tracking)
 			ptrk->start_device(operation, filename);
-			//ptrk->start_tracking();
-			//ptrk->start_flow();
+
+			// Start the tracking and detection
+			ptrk->start_tracking();
+			ptrk->start_flow();
 		}
 	}
 
@@ -245,6 +248,8 @@ int main(int argc, char* argv[]) {
 	MMTracker* trk = ptrackers[0]->getMMTracker();
 	DDFilter* ddfil = ptrackers[0]->getDDFilter();
 
+	int num_devices = ptrackers.size(); 
+
 	while (key != 27) {
 		int curr_key = cv::waitKey(1);
 
@@ -267,21 +272,34 @@ int main(int argc, char* argv[]) {
 				ddfil = ptrackers[dev_select]->getDDFilter();
 				break;
 			case 50:
-				title = "Device 1";
-				dev_select = 1;
-				mydev = mydevs[dev_select];
-				trk = ptrackers[dev_select]->getMMTracker();
-				ddfil = ptrackers[dev_select]->getDDFilter();
+				if (num_devices > 1) {
+					title = "Device 1";
+					dev_select = 1;
+					mydev = mydevs[dev_select];
+					trk = ptrackers[dev_select]->getMMTracker();
+					ddfil = ptrackers[dev_select]->getDDFilter();
+				}
 				break;
 			case 51:
-				img_type = 1;
+				if (num_devices > 2) {
+					title = "Device 2";
+					dev_select = 2;
+					mydev = mydevs[dev_select];
+					trk = ptrackers[dev_select]->getMMTracker();
+					ddfil = ptrackers[dev_select]->getDDFilter();
+				}
 				break;
 			case 52:
+				img_type = 1;
+				break;
+			case 53:
 				img_type = 2;
 				break;
 			default:
 				title = "Device 0";
 				mydev = mydevs[0];
+				trk = ptrackers[0]->getMMTracker();
+				ddfil = ptrackers[0]->getDDFilter();
 				break;
 		}
 
@@ -312,27 +330,24 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (!cvFrame.empty()) {
-			cv::Mat outputImage = cvFrame.clone();
-
 #ifdef ARUCO_DEBUG
 			cv::Mat cmat, ddsf;
 			mydev->getCameraParam(cmat, ddsf);
 			DetectionData ddata = 
 				ptrackers[dev_select]->getArucoDetection();
 
-			cv::aruco::drawDetectedMarkers(outputImage,
+			cv::aruco::drawDetectedMarkers(cvFrame,
 					ddata.mk_corners_,
 					ddata.mk_ids_);
 
 			for (int i = 0; i < ddata.rvecs_.size(); i++) {
-				cv::aruco::drawAxis(outputImage,
+				cv::aruco::drawAxis(cvFrame,
 						cmat, ddsf,
 						ddata.rvecs_[i],
 						ddata.tvecs_[i],
 						0.1);
 			}
 #endif
-
 			cv::Point tg;
 			trk->get_img_tg(selected_vehicle, tg);
 
@@ -381,12 +396,12 @@ int main(int argc, char* argv[]) {
 			trk->position2pixel(dd_pt, est_p);
 			*/
 
-			//cv::circle(outputImage, dd_pt, 10, cv::Scalar(0, 0, 255), 2);
-			cv::circle(outputImage, tg, 15, cv::Scalar(0, 255, 0), 2);
-			cv::rectangle(outputImage, roi, cv::Scalar(0, 0, 255), 2, 1);
+			//cv::circle(cvFrame, dd_pt, 10, cv::Scalar(0, 0, 255), 2);
+			cv::circle(cvFrame, tg, 15, cv::Scalar(0, 255, 0), 2);
+			cv::rectangle(cvFrame, roi, cv::Scalar(0, 0, 255), 2, 1);
 			//cout << "Main DT = " << dt << endl;
-			cv::imshow("Monitor", outputImage);
-			oWriter_rgb.write(outputImage);
+			cv::imshow("Monitor", cvFrame);
+			oWriter_rgb.write(cvFrame);
 
 		/*	
 			static bool initroi = true;
@@ -394,7 +409,7 @@ int main(int argc, char* argv[]) {
 				initroi = false;
 				cv::Rect2d roi;
 				mydev.playbackPause();
-				roi = cv::selectROI("Monitor", outputImage);
+				roi = cv::selectROI("Monitor", cvFrame);
 				mydev.playbackResume();
 				trk.add_target(0, roi);
 			}

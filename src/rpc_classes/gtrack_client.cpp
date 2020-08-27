@@ -1,8 +1,8 @@
-#include "rpcclient/rpc_client.hpp"
+#include "rpc_classes/gtrack_client.hpp"
 #include "rpc/rpc_error.h"
 #include "utils/timelib.hpp"
 
-RPCClient::RPCClient(std::string ip, int port) :
+GTrackClient::GTrackClient(std::string ip, int port) :
 	pclient(new rpc::client(ip, port)),
 	_server_ip(ip) {
 	_server_port = port;
@@ -11,15 +11,15 @@ RPCClient::RPCClient(std::string ip, int port) :
 }
 
 
-RPCClient::~RPCClient() {}
+GTrackClient::~GTrackClient() {}
 
-void RPCClient::reset_connection() {
+void GTrackClient::reset_connection() {
 	delete pclient;
 	pclient = new rpc::client(_server_ip, _server_port),
     pclient->set_timeout(50); 
 }
 
-bool RPCClient::send_data(RpcData data) {
+bool GTrackClient::send_targetdata(RpcPointData data) {
 	rpc::client::connection_state cs = pclient->get_connection_state();
 
 	if (cs != rpc::client::connection_state::connected) {
@@ -37,7 +37,7 @@ bool RPCClient::send_data(RpcData data) {
 	return true;
 }
 
-bool RPCClient::send_atlas_data(RpcAtlasTrsfData data) {
+bool GTrackClient::send_atlas_data(RpcGAtlasTrsfData data) {
 	rpc::client::connection_state cs = pclient->get_connection_state();
 
 	if (cs != rpc::client::connection_state::connected) {
@@ -55,7 +55,7 @@ bool RPCClient::send_atlas_data(RpcAtlasTrsfData data) {
 	return true;
 }
 
-bool RPCClient::get_atlas_data(int src, int dst, RpcAtlasTrsfData& data) {
+bool GTrackClient::get_atlas_data(int src, int dst, RpcGAtlasTrsfData& data) {
 	rpc::client::connection_state cs = pclient->get_connection_state();
 
 	if (cs != rpc::client::connection_state::connected) {
@@ -65,7 +65,7 @@ bool RPCClient::get_atlas_data(int src, int dst, RpcAtlasTrsfData& data) {
 	}
 
 	try {
-		data = pclient->call("get_atlas_trf_data", src, dst).as<RpcAtlasTrsfData>();
+		data = pclient->call("get_atlas_trf_data", src, dst).as<RpcGAtlasTrsfData>();
 	} catch (rpc::timeout &t) {
         std::cout << t.what() << std::endl;
 		return false;
@@ -74,7 +74,7 @@ bool RPCClient::get_atlas_data(int src, int dst, RpcAtlasTrsfData& data) {
 	return true;
 }
 
-bool RPCClient::get_worldmap(RpcData_v& vdata) {
+bool GTrackClient::get_worldmap(RpcPointData_v& vdata) {
 	rpc::client::connection_state cs = pclient->get_connection_state();
 
 	if (cs != rpc::client::connection_state::connected) {
@@ -86,7 +86,7 @@ bool RPCClient::get_worldmap(RpcData_v& vdata) {
 	// Ask for data
 	int i = 0;
 	try {
-		vdata = pclient->call("get_data", i).as<RpcData_v>();
+		vdata = pclient->call("get_data", i).as<RpcPointData_v>();
 	} catch (rpc::timeout &t) {
         std::cout << t.what() << std::endl;
 		return false;
@@ -94,7 +94,7 @@ bool RPCClient::get_worldmap(RpcData_v& vdata) {
 	return true;
 }
 
-bool RPCClient::sync() {
+bool GTrackClient::sync() {
 	rpc::client::connection_state cs = pclient->get_connection_state();
 
 	if (cs != rpc::client::connection_state::connected) {

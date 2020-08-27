@@ -7,6 +7,7 @@
 #include "mmtracker/mmtracker.hpp"
 #include "utils/timelib.hpp"
 
+using namespace mmtracker;
 
 MMTracker::MMTracker() {
 	_MaxTargets = 3;
@@ -526,33 +527,37 @@ int MMTracker::find_target_depth(
 
 	// Run the KMean algorithm on the reshaped depth cv::Mat
 	// to find 'ks' clusters and respective distances
-	int ks = 1;
-	double cmp = cv::kmeans(tg_v_nz, ks, labels,
-			cv::TermCriteria(cv::TermCriteria::EPS +
-				cv::TermCriteria::COUNT, 20, err),
-			attempts, cv::KMEANS_PP_CENTERS, distances);
+	int ks = 0;
+	double cmp = 0;
 
-	while (ks < MaxK) {
+	if (tg_v_nz.total() > 0) {
 		ks++;
-		cv::Mat local_labels = labels;
-		cv::Mat local_distances = distances;
-		double local_cmp;
-
-		local_cmp = cv::kmeans(tg_v_nz, ks, local_labels,
+		double cmp = cv::kmeans(tg_v_nz, ks, labels,
 				cv::TermCriteria(cv::TermCriteria::EPS +
-					cv::TermCriteria::COUNT, 10, err),
-				attempts, cv::KMEANS_USE_INITIAL_LABELS,
-				local_distances);
+					cv::TermCriteria::COUNT, 20, err),
+				attempts, cv::KMEANS_PP_CENTERS, distances);
 
-		double improv_ratio = (cmp - local_cmp)/cmp;
-		if (improv_ratio < 0.3) {
-			break;
-		} else {
-			labels = local_labels;
-			distances = local_distances;
-			cmp = local_cmp;
+		while (ks < MaxK) {
+			ks++;
+			cv::Mat local_labels = labels;
+			cv::Mat local_distances = distances;
+			double local_cmp;
+
+			local_cmp = cv::kmeans(tg_v_nz, ks, local_labels,
+					cv::TermCriteria(cv::TermCriteria::EPS +
+						cv::TermCriteria::COUNT, 10, err),
+					attempts, cv::KMEANS_USE_INITIAL_LABELS,
+					local_distances);
+
+
+			double improv_ratio = (cmp - local_cmp)/cmp;
+			if (improv_ratio < 0.3) {
+				break;
+			} else {
+				labels = local_labels;
+				distances = local_distances;
+				cmp = local_cmp; }
 		}
-	}
 	
 	// Order the clusters in ascending order.
 	cv::Mat indexes;
@@ -571,6 +576,7 @@ int MMTracker::find_target_depth(
 
 	*tg_distance = min;
 	*tg_distance_std = std[0];
+	}
 
 	return ks;
 }
@@ -642,6 +648,7 @@ void MMTracker::optical_flow_step(cv::Mat& cvFrame,
 			cv::Mat labels;
 			double err = 0.5;
 
+			
 			double perf = cv::kmeans(nonzero_pix, ks, labels,
 					cv::TermCriteria(cv::TermCriteria::EPS +
 						cv::TermCriteria::COUNT, 50, err),

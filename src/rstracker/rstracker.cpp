@@ -17,7 +17,7 @@ RSTracker::RSTracker(DeviceInterface* pdev) {
 	opt_flow_period.tv_sec = 0;
 
 	// Create the tracker class
-	_ptrk = new MMTracker;
+	_ptrk = new mmtracker::MMTracker;
 	_ptrk->setDepthScale(_pdev->getDevConfig().depth_scale);
 
 	// Craete the filter class
@@ -62,8 +62,8 @@ void RSTracker::stop_flow() {
 	_flowActive = false;
 }
 
-void RSTracker::addWorldMap(Atlas* map) {
-	_world_map = map;	
+void RSTracker::addWorldMap(GAtlas* map) {
+	_gatlas = map;	
 }
 
 void RSTracker::start_device(int operation, std::string fname) {
@@ -84,7 +84,7 @@ void RSTracker::start_device(int operation, std::string fname) {
 	// Get the intrisic parameters from the device as
 	// cv::Mat	
 	_pdev->getCameraParam(_cmat, _ddsf);
-	_paruco_detector = new ArucoDetector(_cmat, _ddsf, 0.14, 0);
+	_paruco_detector = new ArucoDetector(_cmat, _ddsf, 0.141, 0);
 
 	_atlas_thread = std::thread(&RSTracker::autoSetWorldReference, this);
 }
@@ -99,12 +99,13 @@ void RSTracker::autoSetWorldReference() {
 
 	clock_gettime(CLOCK_MONOTONIC, &nextAct);
 	while (!_shutting_down) {
-		add_timespec(&nextAct, &opt_flow_period, &nextAct);
+		add_timespec(&nextAct, &thread_period, &nextAct);
 		// Get a frame and detect the arucos
 		cv::Mat cvFrame;
 		_pdev->synchronize();
 		_pdev->get_rgb(cvFrame);
 		int Ndetected = 0;
+		mx.lock();
 		if (!cvFrame.empty()) {
 			Ndetected = _paruco_detector->processImage(
 					_aruco_map, _detect_data, cvFrame, 0);
@@ -114,12 +115,12 @@ void RSTracker::autoSetWorldReference() {
 		std::vector<int> aruco_ids;
 		for (auto& el : _aruco_map) {
 			aruco_ids.push_back(el.first);
-			
 		}
 
 		if (aruco_ids.size() > 0) {
 			_local_aruco_id = aruco_ids[0];
 		}
+		
 
 		// If I have at least a pair of aruco
 		if (Ndetected > 1) {
@@ -137,19 +138,26 @@ void RSTracker::autoSetWorldReference() {
 						(_aruco_map[id_j].C_p_CM_ - _aruco_map[id_i].C_p_CM_);
 
 					// Send the info to the GAtlas
-					_world_map->send_map_transform(id_i, id_j, v_ij, q_ij);
+					gatlas::TransformData tr;
+					tr.t = v_ij;
+					tr.rot = q_ij;
+					_gatlas->setTransform(id_i, id_j, tr);
 				}
 			}
 		}
 
+		mx.unlock();
+
 
 		// Check whether we can map the local measurement in the 
-		// global reference system
-		Eigen::Vector3d w_p_wk;
-		Eigen::Quaterniond w_q_k;
-		bool res = _world_map->get_map_transform(_global_aruco_ref,
-				_local_aruco_id, w_p_wk, w_q_k);
-			
+		// global reference system	
+		gatlas::TransformData tr;
+		bool res = _gatlas->getTransform(_global_aruco_ref,
+				_local_aruco_id, tr);
+
+		Eigen::Vector3d w_p_wk = tr.t;
+		Eigen::Quaterniond w_q_k = tr.rot;	
+
 		mx.lock();
 		if (res) {
 			// w_q_wc = w_q_k * k_q_c 
@@ -171,7 +179,6 @@ void RSTracker::autoSetWorldReference() {
 
 bool RSTracker::start_tracking() {
 	// Block until the camera has acquired the refernce
-	while (!_ready) { }
 
 	std::cout << "Start Tracking from [" << _pdev->getSerial() << "]" <<
 		std::endl;
@@ -190,7 +197,7 @@ void RSTracker::start_flow() {
 	_flow_thread = std::thread(&RSTracker::opticalflow_runnable, this);
 }
 
-MMTracker* RSTracker::getMMTracker() {
+mmtracker::MMTracker* RSTracker::getMMTracker() {
 	return _ptrk;
 }
 
@@ -257,7 +264,7 @@ void RSTracker::track_runnable() {
 			num_detect = _ptrk->step(cvRGB, cvDepth);
 
 			if (num_detect > 0) {
-				std::vector<TargetData> targets;
+				std::vector<mmtracker::TargetData> targets;
 				_ptrk->get_targets(targets);
 
 				if (_ready) {
@@ -269,8 +276,8 @@ void RSTracker::track_runnable() {
 						/*
 						   W_t = (_aruco_map[0].q_CM_.inverse() *
 						   (pos_ - _aruco_map[0].C_p_CM_));
-						   */
-						_world_map->add_target_data(tg.id,
+						*/
+						_gatlas->update_target_data(tg.id,
 								W_t,
 								Eigen::Vector3d::Zero(),
 								timespec2micro(&t_now));
@@ -321,15 +328,15 @@ void RSTracker::opticalflow_runnable() {
 		_pdev->get_rgb(cvFrame);
 
 		// Optical Flow Step
-		std::vector<TargetData> untracked_points;
+		std::vector<mmtracker::TargetData> untracked_points;
 		_ptrk->optical_flow_step(cvFrame, untracked_points);
 
 		// The step should tell me if there are untracked movements
 		// Let's assume I have vector of positions
 		
 		// Check in the global map if there is something there
-		std::vector<AtlasItem> atlas_items;
-		_world_map->get_items(atlas_items);
+		std::vector<gatlas::TargetData> atlas_items;
+		_gatlas->get_items(atlas_items);
 
 		for (auto dtc_p : untracked_points) {
 			// Compute the Word Frame position of the

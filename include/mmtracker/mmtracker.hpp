@@ -25,9 +25,9 @@
 #include <mutex>
 #include <fstream>
 
-#include "atlas/atlas.hpp"
+#include "gatlas/gatlas.hpp"
 
-
+namespace mmtracker {
 /**
  * This data structure represent the target
  * tracked by a single device. For this reason the information
@@ -302,4 +302,6 @@ class MMTracker {
 		double poly_sigma;
 		int flags;
 };
+
+}
 #endif

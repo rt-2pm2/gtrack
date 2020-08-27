@@ -18,7 +18,7 @@
 #include "mmtracker/mmtracker.hpp"
 #include "arucodetector/arucodetector.hpp"
 #include "filter/ddfilter.hpp"
-#include "atlas/atlas.hpp"
+#include "gatlas/gatlas.hpp"
 #include <time.h>
 
 class RSTracker {
@@ -35,14 +35,14 @@ class RSTracker {
 		/**
 		 * Add World Map
 		 */
-		void addWorldMap(Atlas* map);
+		void addWorldMap(GAtlas* map);
 
 
 		/**
 		 * Get Ref to inner classes...dirty and temporary
 		 */
 		DDFilter* getDDFilter();
-		MMTracker* getMMTracker();
+		mmtracker::MMTracker* getMMTracker();
 		DetectionData getArucoDetection();
 
 		/**
@@ -96,7 +96,7 @@ class RSTracker {
 		 * images and return a measurement/estimation of the 
 		 * target position.
 		 */
-		MMTracker* _ptrk;
+		mmtracker::MMTracker* _ptrk;
 
 		/**
 		 * Device class
@@ -126,7 +126,7 @@ class RSTracker {
 		/**
 		 * World Map reference
 		 */
-		Atlas* _world_map;
+		GAtlas* _gatlas;
 
 
 		/**

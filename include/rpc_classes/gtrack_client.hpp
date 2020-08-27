@@ -8,20 +8,20 @@
 
 #include "rpc_data.hpp"
 
-class RPCClient {
+class GTrackClient {
 	public: 
-		RPCClient(std::string ip, int port);
-		~RPCClient();
+		GTrackClient(std::string ip, int port);
+		~GTrackClient();
 
 		void reset_connection();
 
 		bool sync();
 
-		bool send_data(RpcData map_data);
-		bool send_atlas_data(RpcAtlasTrsfData data);
+		bool send_targetdata(RpcPointData map_data);
+		bool send_atlas_data(RpcGAtlasTrsfData data);
 
-		bool get_worldmap(RpcData_v& vdata);
-		bool get_atlas_data(int src, int dst, RpcAtlasTrsfData& data);
+		bool get_worldmap(RpcPointData_v& vdata);
+		bool get_atlas_data(int src, int dst, RpcGAtlasTrsfData& data);
 	private:
 		int _server_port;
 		std::string _server_ip;

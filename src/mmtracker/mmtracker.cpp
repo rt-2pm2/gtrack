@@ -647,7 +647,6 @@ void MMTracker::optical_flow_step(cv::Mat& cvFrame,
 			cv::Mat centers;
 			cv::Mat labels;
 			double err = 0.5;
-
 			
 			double perf = cv::kmeans(nonzero_pix, ks, labels,
 					cv::TermCriteria(cv::TermCriteria::EPS +

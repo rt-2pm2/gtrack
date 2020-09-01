@@ -162,7 +162,7 @@ bool GAtlas::getTransform(int orig, int dest, TransformData& tr) {
 
 	// Check whether the nodes are in the map
 	if (_gatlas.count(orig) == 0 || _gatlas.count(dest) == 0) {
-		return success;
+		return false;
 	}
 
 	_visited.clear(); 
@@ -223,39 +223,47 @@ int GAtlas::get_items(std::vector<TargetData>& vout) {
 bool GAtlas::find_path(int s, int e, TransformData& TR) {
 	bool out = false;
 
-	if (s == e) {
-		TR.rot = Eigen::Quaterniond::Identity();
-		TR.t = Eigen::Vector3d::Zero();
-		return true;
-	}
-
-	// Nodes connected to the current node 's' 
-	std::unordered_map<int, TransformData> rels = _gatlas[s].relations;
 	// Add the current node to the set of visited nodes
 	_visited.insert(s);
+	// Nodes connected to the current node 's' 
+	std::unordered_map<int, TransformData> rels = _gatlas[s].relations;
 
 	// For each connected node
 	for (auto el : rels) {
 		int nextId = el.first;
-		TransformData locTR = el.second;
-
-		TransformData downstreamTR;
 
 		if (_visited.count(nextId) > 0) 
 			continue;
 
+		TransformData locTR = el.second;
+
+		if (nextId == e) {
+			TR.rot = locTR.rot;
+			TR.t = locTR.t;
+#ifdef GATLAS_DEBUG
+			std::cout << "Path [" << s << " --> "<< e << "]:" <<
+				std::endl; 
+			std::cout << "      t:" << locTR.t.transpose() <<
+				std::endl; 
+			std::cout << "      q:" << locTR.rot.w() << " " <<
+				locTR.rot.vec().transpose() << std::endl;
+#endif
+			return true;
+		}
+
+		TransformData downstreamTR;
 		out = find_path(nextId, e, downstreamTR);
 		if (out) {
-#ifdef GATLAS_DEBUG
-			std::cout << "Path [" << nextId << " --> "<< e << "]:" <<
-				std::endl; 
-			std::cout << "      t:" << downstreamTR.t.transpose() <<
-				std::endl; 
-			std::cout << "      q:" << downstreamTR.rot.w() << " " <<
-				downstreamTR.rot.vec().transpose() << std::endl;
-#endif
 			TR.t = locTR.rot * downstreamTR.t + locTR.t;
 			TR.rot = locTR.rot * downstreamTR.rot;
+#ifdef GATLAS_DEBUG
+			std::cout << "Path [" << s << " --> "<< e << "]:" <<
+				std::endl; 
+			std::cout << "      t:" << TR.t.transpose() <<
+				std::endl; 
+			std::cout << "      q:" << TR.rot.w() << " " <<
+				TR.rot.vec().transpose() << std::endl;
+#endif
 			return true;
 		}
 	}

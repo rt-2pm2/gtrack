@@ -160,7 +160,6 @@ bool GAtlas::getTransform(int orig, int dest, TransformData& tr) {
 
 	std::unique_lock<std::mutex> lk(_atlasdata_mx);
 
-	//lk.lock();
 	// Check whether the nodes are in the map
 	if (_gatlas.count(orig) == 0 || _gatlas.count(dest) == 0) {
 		return success;
@@ -248,10 +247,12 @@ bool GAtlas::find_path(int s, int e, TransformData& TR) {
 		out = find_path(nextId, e, downstreamTR);
 		if (out) {
 #ifdef GATLAS_DEBUG
-			std::cout << "Path: " << nextId << std::endl; 
-			std::cout << "      " << locTR.t.transpose() << std::endl; 
-			std::cout << "      " << locTR.rot.w() << " " <<
-				locTR.rot.vec().transpose() << std::endl;
+			std::cout << "Path [" << nextId << " --> "<< e << "]:" <<
+				std::endl; 
+			std::cout << "      t:" << downstreamTR.t.transpose() <<
+				std::endl; 
+			std::cout << "      q:" << downstreamTR.rot.w() << " " <<
+				downstreamTR.rot.vec().transpose() << std::endl;
 #endif
 			TR.t = locTR.rot * downstreamTR.t + locTR.t;
 			TR.rot = locTR.rot * downstreamTR.rot;

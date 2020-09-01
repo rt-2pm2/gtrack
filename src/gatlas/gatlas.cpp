@@ -223,10 +223,22 @@ int GAtlas::get_items(std::vector<TargetData>& vout) {
 bool GAtlas::find_path(int s, int e, TransformData& TR) {
 	bool out = false;
 
+	
+
 	// Add the current node to the set of visited nodes
 	_visited.insert(s);
+
+	if (s == e) {
+#ifdef GATLAS_DEBUG
+			std::cout << "Path [" << s << " --> "<< e << "]:" <<
+				std::endl; 
+#endif
+			return true;
+	}
+
 	// Nodes connected to the current node 's' 
 	std::unordered_map<int, TransformData> rels = _gatlas[s].relations;
+
 
 	// For each connected node
 	for (auto el : rels) {

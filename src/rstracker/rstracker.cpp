@@ -124,7 +124,6 @@ void RSTracker::autoSetWorldReference() {
 
 		// If I have at least a pair of aruco
 		if (Ndetected > 1) {
-			std::cout << Ndetected << std::endl;
 			for (int i = 0; i < Ndetected; i++) {
 				for (int j = i + 1; j < Ndetected; j++) {
 					int id_i = aruco_ids[i];

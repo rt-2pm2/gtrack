@@ -33,6 +33,12 @@ _build_dirs := $(shell for d in $(_obj_fld) $(data_dir); \
 
 vpath %.cpp $(source_dir)
 
+
+
+CPPFLAGS += -DGATLAS_DEBUG
+#CPPFLAGS += -DDEVINTERFACE_DEBUG
+
+
 .PHONY: program
 program: $(objects)
 	$(CXX) -o $(binary_dir)/$(program) $^ $(LDFLAGS) 

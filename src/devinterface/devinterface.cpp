@@ -221,6 +221,13 @@ bool DeviceInterface::getCameraParam(cv::Mat& cameraMatrix, cv::Mat& dCoeff) {
 		out = false;
 	}
 
+#ifdef DEVINTERFACE_DEBUG
+	std::cout << "Camera Intrinsic: " << std::endl;
+	std::cout << "dcoeff: " << dCoeff.t() << std::endl;
+	std::cout << "Cam Matrix: " << std::endl;
+	std::cout << cameraMatrix << std::endl;
+#endif
+
 	return out;
 }
 

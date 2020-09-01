@@ -63,7 +63,6 @@ int search_bags(const std::string path, std::vector<std::string>& v_names) {
 }
 
 
-
 int main(int argc, char* argv[]) {
 	int key = 49;
 
@@ -78,9 +77,9 @@ int main(int argc, char* argv[]) {
 
 	bool playback = false;
 	bool recording = false;
+	bool rem_server = false;
 	int operation = RSTRK_ONLINE;
 	int option;
-
 
 	/**
 	 * Parse options
@@ -104,6 +103,7 @@ int main(int argc, char* argv[]) {
 				break;
 			case 's': // Server
 				ip = optarg;
+				rem_server = true;
 				cout << "Atlas Server @: " << optarg << endl;
 		}
 	}
@@ -111,8 +111,15 @@ int main(int argc, char* argv[]) {
 	if (playback) { cout << " ==== Playback Mode ==== " << endl; }
 	if (recording) { cout << "++++ Recording Active ++++ " << endl; }
 
-	//Atlas wmap(ip, 8080);
-	GAtlas wmap;
+	/**
+	 * If external Atlas server required
+	 */
+	GAtlas* wmap;
+	if (rem_server) {
+		wmap = new GAtlas(ip, 8080);
+	} else {
+		wmap = new GAtlas();
+	}
 
 	if (file_exist(config_file)) {
 		cout << "Found configuration file!" << endl;
@@ -178,7 +185,7 @@ int main(int argc, char* argv[]) {
 			cout << "Adding Device..." << endl;
 			DeviceInterface* pdev = new DeviceInterface();
 			RSTracker* ptrk = new RSTracker(pdev);
-			ptrk->addWorldMap(&wmap);
+			ptrk->addWorldMap(wmap);
 
 			// Add to the vector of device and trackers
 			mydevs.push_back(pdev);
@@ -199,7 +206,7 @@ int main(int argc, char* argv[]) {
 			cout << "Adding Device..." << endl;
 			DeviceInterface* pdev = new DeviceInterface(devcfg, ctx, dev);
 			RSTracker* ptrk = new RSTracker(pdev);
-			ptrk->addWorldMap(&wmap);
+			ptrk->addWorldMap(wmap);
 
 			// Add to the vector of device and trackers
 			mydevs.push_back(pdev);

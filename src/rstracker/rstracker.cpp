@@ -84,7 +84,7 @@ void RSTracker::start_device(int operation, std::string fname) {
 	// Get the intrisic parameters from the device as
 	// cv::Mat	
 	_pdev->getCameraParam(_cmat, _ddsf);
-	_paruco_detector = new ArucoDetector(_cmat, _ddsf, 0.141, 0);
+	_paruco_detector = new ArucoDetector(_cmat, _ddsf, 0.14, 0);
 
 	_atlas_thread = std::thread(&RSTracker::autoSetWorldReference, this);
 }

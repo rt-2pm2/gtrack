@@ -127,6 +127,19 @@ void GAtlas::setTransform(int a, int b,
 	if (client) {
 		send_map_transform(a, b, TR.t, TR.rot);
 	}
+
+#ifdef GATLAS_DEBUG
+	std::cout << "Transform [" << a << " --> " << b << "]:"<< std::endl; 
+	std::cout << "      t = " << TR.t.transpose() << std::endl; 
+	std::cout << "      q = " << TR.rot.w() << " " <<
+		TR.rot.vec().transpose() << std::endl;
+
+	std::cout << "Transform [" << b << " --> " << a << "]:"<< std::endl; 
+	std::cout << "      t = " << invTR.t.transpose() << std::endl; 
+	std::cout << "      q = " << invTR.rot.w() << " " <<
+		invTR.rot.vec().transpose() << std::endl;
+#endif
+
 }
 
 std::vector<int> GAtlas::get_fiducialsIds() {

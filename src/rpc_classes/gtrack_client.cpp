@@ -29,7 +29,7 @@ bool GTrackClient::send_targetdata(RpcPointData data) {
 	}
 
 	try {
-		pclient->async_call("new_data", data);
+		pclient->async_call("send_data", data);
 	} catch (rpc::timeout &t) {
         std::cout << t.what() << std::endl;
 		return false;

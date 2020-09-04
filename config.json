@@ -1,6 +1,6 @@
 {
-    "width":848,
-    "height":480,
+    "width":1280,
+    "height":720,
     "fps": 30,
 	"depth_scale":0.0001
 }

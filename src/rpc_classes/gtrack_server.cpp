@@ -7,6 +7,13 @@
 GTrackServer::GTrackServer() :
     pserver(nullptr) {
         initialized_ = false;
+		server_port_ = 8080;
+}
+
+GTrackServer::GTrackServer(int port) :
+    pserver(nullptr) {
+        initialized_ = false;
+		server_port_ = port;
 }
 
 GTrackServer::~GTrackServer() {}
@@ -85,13 +92,6 @@ bool GTrackServer::Initialize() {
 
 
 void GTrackServer::onNewData(RpcPointData data) {
-    /*
-    std::cout << "Received data" << std::endl;
-    std::cout << "t = " << data.t << std::endl;
-    std::cout << "position = [" << data.xx << " " <<
-        data.yy << " " << data.zz << "]" << std::endl;
-    */
-
 }
 
 void GTrackServer::onNewTrfData(RpcGAtlasTrsfData data) {

@@ -23,7 +23,7 @@
 class GTrackServer {
 	public: 
         GTrackServer();
-		//GTrackServer(int port);
+		GTrackServer(int port);
 		~GTrackServer();
 
 		bool Initialize();
@@ -47,7 +47,7 @@ class GTrackServer {
          */
         void onNewTrfData(RpcGAtlasTrsfData data);
 
-		void onNewData(RpcPointData data);
+		virtual void onNewData(RpcPointData data);
 };
 
 #endif

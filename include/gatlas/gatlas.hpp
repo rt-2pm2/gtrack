@@ -1,6 +1,16 @@
 /**
  * \file gatlas.hpp
  *
+ * This class contains the shared information of a gtrack node.
+ * Precisely it contains the graph of the fiducial markers in a map and
+ * the map of the tracked target.
+ *
+ * If the "client" is defined, the operation for setting and getting are
+ * augmented to send and fetch information from a remote server.
+ * In this respect, the GAtlas encapsulate the part of the remote 
+ * connection, such that the node is not aware of that when dealing
+ * with the shared data structure.
+ *
  */
 
 #ifndef _GATLAS_HPP_

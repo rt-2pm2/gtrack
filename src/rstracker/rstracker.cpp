@@ -350,11 +350,13 @@ void RSTracker::opticalflow_runnable() {
 			for (auto el : atlas_items) {
 				double dist = (el.pos - W_t).norm();
 				if (dist < 0.2) {
-					std::cout << "Locking new target [" <<
-						el.id << "]!" << std::endl;
+					std::cout << "<" << _pdev->getSerial() <<
+						"> Locking new target [" << el.id <<
+						"]!" << std::endl;
 					_ptrk->add_target(el.id, dtc_p.roi);
 				} else {
-					std::cout << "Not a good match" << std::endl;
+					std::cout << "<" << _pdev->getSerial() <<
+						"> Not a good match" << std::endl;
 					std::cout << el.pos.transpose() << std::endl;
 					std::cout << W_t.transpose() << std::endl;
 				}

@@ -304,10 +304,10 @@ int GAtlas::send_map_transform(int id_i, int id_j,
 			data.pos[kk] = v_ij(kk); 
 			data.quat[kk + 1] = q_ij.vec()(kk);
 		}
-
+#ifdef GATLAS_DEBUG
 		std::cout << "[" << id_i << "-->" << id_j << "]" << std::endl;
 		std::cout << "p = " << v_ij.transpose() << std::endl; 
-
+#endif
 		out = client->send_atlas_data(data);
 	}
 	

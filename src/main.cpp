@@ -20,11 +20,6 @@
 
 #include <dirent.h>
 
-
-#define ARUCO_DEBUG
-//#define HIST_DEBUG
-//#define MASK_DEBUG
-
 using namespace std;
 using namespace mmtracker;
 

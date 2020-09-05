@@ -10,6 +10,15 @@
 using namespace mmtracker;
 
 MMTracker::MMTracker() {
+	_mmtracker_name = "";
+	ResetMMParam();	
+}
+
+MMTracker::MMTracker(std::string name) : _mmtracker_name{name} {
+	ResetMMParam();	
+}
+
+void MMTracker::ResetMMParam() {
 	_MaxTargets = 3;
 
 	_delta_depth_param = 5.0;
@@ -30,10 +39,11 @@ MMTracker::MMTracker() {
 	poly_sigma = poly_n * 0.2;
 	flags = 0;
 
-	_log_flow.open("trk_flow_log.csv");
+	_log_flow.open(_mmtracker_name + "trk_flow_log.csv");
 	_log_flow << "time[us] min_flow max_flow Npix" << std::endl;
 
-	_log_trk.open("trk_log.csv");
+	_log_trk.open(_mmtracker_name + "trk_log.csv");
+	
 }
 
 
@@ -212,7 +222,11 @@ int MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 				b_target_[2] << std::endl;
 			el_it++;
 		} else {
-			std::cout << "Depth not valid" << std::endl;	
+			std::cout << "<" << _mmtracker_name << "> " <<
+				"[" << t_micro << "]" << "Depth not valid" << std::endl;	
+			_log_trk << "[" << t_micro << "]" <<
+				"Depth not valid" << std::endl;	
+
 			/*
 			   img_x_global = local_roi.tl().x + local_roi.width;
 			   img_y_global = local_roi.tl().y + local_roi.height;

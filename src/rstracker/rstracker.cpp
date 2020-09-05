@@ -17,7 +17,7 @@ RSTracker::RSTracker(DeviceInterface* pdev) {
 	opt_flow_period.tv_sec = 0;
 
 	// Create the tracker class
-	_ptrk = new mmtracker::MMTracker;
+	_ptrk = new mmtracker::MMTracker(pdev->getSerial());
 	_ptrk->setDepthScale(_pdev->getDevConfig().depth_scale);
 
 	// Craete the filter class

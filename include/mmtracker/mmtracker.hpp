@@ -96,6 +96,7 @@ struct TargetData {
 class MMTracker {
 	public:
 		MMTracker();
+		MMTracker(std::string name);
 		~MMTracker();
 
 		void set_transform(const Eigen::Vector3d& t,
@@ -158,7 +159,12 @@ class MMTracker {
 		 */
 		int get_targets(std::vector<TargetData>& T);
 
+
+		std::string _mmtracker_name;
 	private:
+
+		void ResetMMParam();
+
 
 		/**
 		 * Transformation world to camera

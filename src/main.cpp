@@ -229,15 +229,15 @@ int main(int argc, char* argv[]) {
 	cv::moveWindow("Monitor", 0, 0);
 
 #ifdef HIST_DEBUG
-	cv::namedWindow("Hist", cv::WINDOW_AUTOSIZE);
+	cv::namedWindow("Hist", cv::WINDOW_AUTOSIZE + cv::WINDOW_OPENGL);
 	cv::moveWindow("Hist", 1280, 200);
 #endif
 
 #ifdef MASK_DEBUG
-	cv::namedWindow("Mask", cv::WINDOW_AUTOSIZE);
+	cv::namedWindow("Mask", cv::WINDOW_AUTOSIZE + cv::WINDOW_OPENGL);
 	cv::moveWindow("Mask", 1280, 0);
 
-	cv::namedWindow("Flow", cv::WINDOW_AUTOSIZE);
+	cv::namedWindow("Flow", cv::WINDOW_AUTOSIZE + cv::WINDOW_OPENGL);
 	cv::moveWindow("Flow", 1280, 800);
 #endif
 

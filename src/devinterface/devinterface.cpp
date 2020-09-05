@@ -152,7 +152,7 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 		if (operation != RSTRK_PLAYBACK) {
 			// Set Accuracy
 			d_sensor.set_option(RS2_OPTION_VISUAL_PRESET,
-					RS2_RS400_VISUAL_PRESET_HIGH_ACCURACY);
+					RS2_RS400_VISUAL_PRESET_HIGH_DENSITY);
 
 			// Set Depth Scale
 			d_sensor.set_option(RS2_OPTION_DEPTH_UNITS,

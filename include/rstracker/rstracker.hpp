@@ -53,7 +53,7 @@ class RSTracker {
 		/**
 		 * Stop tracking
 		 */
-		bool stop_tracking();
+		void stop_tracking();
 
 		/**
 		 * Start Flow Thread

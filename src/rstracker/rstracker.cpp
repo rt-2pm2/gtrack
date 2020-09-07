@@ -46,7 +46,7 @@ bool RSTracker::isReady() {
 	return _ready;
 }
 
-bool RSTracker::stop_tracking() {
+void RSTracker::stop_tracking() {
 	_shutting_down = true;
 	std::cout << "Stopping Tracker " << _pdev->getSerial() <<
 		"..." << std::endl;
@@ -164,6 +164,11 @@ void RSTracker::autoSetWorldReference() {
 			// w_p_wc = w_p_wk - w_q_c * c_p_ck 
 			_w_p_wc = w_p_wk - 
 				_w_q_c * _aruco_map[_local_aruco_id].C_p_CM_; 
+
+			if (!_ready) {
+				std::cout << "CAMERA POSITION: " <<
+					_w_p_wc.transpose() << std::endl;
+			}
 			_ready = true;
 		} else {
 			_ready = false;

@@ -283,10 +283,21 @@ void RSTracker::track_runnable() {
 						   W_t = (_aruco_map[0].q_CM_.inverse() *
 						   (pos_ - _aruco_map[0].C_p_CM_));
 						*/
+						bool valid = true;
+						
+						for (int i = 0; i < 3; i++) {
+							if (std::isnan(W_t(i)) || !std::isfinite(W_t(i))) {
+								valid = false;
+								break;
+							}
+						}
+
+						if (valid) {
 						_gatlas->update_target_data(tg.id,
 								W_t,
 								Eigen::Vector3d::Zero(),
 								timespec2micro(&t_now));
+						}
 
 						_outfile << timespec2micro(&t_now) << " " <<
 							tg.id << " ";

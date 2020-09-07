@@ -343,10 +343,7 @@ void RSTracker::opticalflow_runnable() {
 			mx.lock();
 			Eigen::Vector3d W_t = _w_p_wc + _w_q_c * dtc_p.b_tg;
 			mx.unlock();
-			/*
-			Eigen::Vector3d W_t = (_aruco_map[0].q_CM_.inverse() *
-				 (dtc_p.b_tg - _aruco_map[0].C_p_CM_));
-			*/
+
 			for (auto el : atlas_items) {
 				double dist = (el.pos - W_t).norm();
 				if (dist < 0.2) {
@@ -357,8 +354,8 @@ void RSTracker::opticalflow_runnable() {
 				} else {
 					std::cout << "<" << _pdev->getSerial() <<
 						"> Not a good match" << std::endl;
-					std::cout << el.pos.transpose() << std::endl;
-					std::cout << W_t.transpose() << std::endl;
+					std::cout << "Map: " << el.pos.transpose() << std::endl;
+					std::cout << "Detected: " << W_t.transpose() << std::endl;
 				}
 			}
 		}

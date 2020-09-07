@@ -120,7 +120,6 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 			_isplayback = false;
 
 			_cfg.enable_device(_serial);
-			std::cout << _dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE) << std::endl;
 
 			// Configure the pipeline
 			if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) != "L500") {
@@ -165,7 +164,7 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 	if (operation != RSTRK_PLAYBACK) {
 		rs2::depth_sensor d_sensor = profile.get_device().first<rs2::depth_sensor>();
 		if (d_sensor) {
-			if (d_sensor.is<rs2::depth_stereo_sensor>()) {
+			if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) != "D400") {
 				// Set Accuracy
 				std::cout << "DEPTH STEREO SENSOR: Setting preset" << std::endl;
 				d_sensor.set_option(RS2_OPTION_VISUAL_PRESET,
@@ -175,9 +174,9 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 				d_sensor.set_option(RS2_OPTION_DEPTH_UNITS,
 						dev_cfg.depth_scale);
 			}
-			if (d_sensor.is<rs2::depth_sensor>()) {
+			if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) != "L500") {
 				// Set Accuracy
-				std::cout << "DEPTH SENSOR: Setting preset" << std::endl;
+				std::cout << "DEPTH STEREO SENSOR: Setting preset" << std::endl;
 				d_sensor.set_option(RS2_OPTION_VISUAL_PRESET,
 						RS2_L500_VISUAL_PRESET_MAX_RANGE);
 

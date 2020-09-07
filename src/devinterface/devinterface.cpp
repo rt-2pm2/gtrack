@@ -133,8 +133,19 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 						dev_cfg.rgb_format,
 						dev_cfg.rgb_framerate);
 			} else {
+				if (dev_cfg.depth_width != 1024) {
+					std::cout << "Forcing depth width to " <<
+						1024 << std::endl;
+					dev_cfg.depth_width = 1024;
+				}
+				if (dev_cfg.depth_height != 768) {
+					std::cout << "Forcing depth width to " <<
+						768 << std::endl;
+					dev_cfg.depth_height = 768;
+				}
+
 				_cfg.enable_stream(RS2_STREAM_DEPTH,
-						1024, 768,
+						dev_cfg.depth_width, dev_cfg.depth_height,
 						dev_cfg.depth_format,
 						dev_cfg.depth_framerate);
 
@@ -156,7 +167,6 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 	}
 	profile = _pipeline.start(_cfg);
 	std::cout << "Pipeline started!" << std::endl;
-//
 
 	// Now that the device is started I can get information
 	// about the sensors and finish the configuration.
@@ -175,13 +185,9 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 						dev_cfg.depth_scale);
 			}
 			
-			/*
 			std::vector<rs2_option> opt =  d_sensor.get_supported_options();
 
-			for (auto el : opt) {
-				std::cout << d_sensor.get_option_name(el) << " " << d_sensor.is_option_read_only(el) << std::endl;
-			}
-			*/
+			
 			if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) == "L500") {
 				// Set Accuracy
 				std::cout << "DEPTH SENSOR: Setting preset" << std::endl;
@@ -191,7 +197,9 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 				dev_cfg.depth_scale = d_sensor.get_option(RS2_OPTION_DEPTH_UNITS);
 			}
 
-			
+		for (auto el : opt) {
+				std::cout << d_sensor.get_option_name(el) << " " << d_sensor.get_option(el) << std::endl;
+			}
 		}
 	}
 

@@ -200,6 +200,7 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 		for (auto el : opt) {
 				std::cout << d_sensor.get_option_name(el) << " " << d_sensor.get_option(el) << std::endl;
 			}
+		std::cout << std::endl;
 		}
 	}
 

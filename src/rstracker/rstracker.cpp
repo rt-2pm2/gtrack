@@ -75,11 +75,13 @@ void RSTracker::start_device(int operation, std::string fname) {
 	_outfile << std::endl;
 
 	_pdev->startDevice(operation, fname);
-
 	// Get intrinsic parameters from the device.
 	rs2_intrinsics intr;
 	_pdev->getCameraParam(intr);
 	_ptrk->setCamMatrix(intr);	
+
+
+	_ptrk->setDepthScale(_pdev->getDevConfig().depth_scale);
 
 	// Get the intrisic parameters from the device as
 	// cv::Mat	

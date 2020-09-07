@@ -473,6 +473,11 @@ void MMTracker::find_target_in_roi(
 	int numK = find_target_depth(&tg_dist, &tg_dist_std,
 			depth_roi_32f, 2, 0.1);
 
+#ifdef MMTRACKER_DEBUG
+	std::cout << "Moving object distance: " << 
+		tg_dist * _dscale << " [m]" << std::endl;
+#endif
+
 	// Select the part of the image which as a measured distance, 
 	// near the one estimated from the target.
 	cv::Mat thr1, thr2;
@@ -507,9 +512,19 @@ void MMTracker::find_target_in_roi(
 	rs2_deproject_pixel_to_point(b_target_, &_camera_intr,
 				upixel, b_tg_pix[2] * _dscale);
 
+#ifdef MMTRACKER_DEBUG
+	std::cout << "Moving object Coordinates (w.r.t cam): [ ";
+#endif
+
 	for (int i = 0; i < 3; i++) {
 		b_tg(i) = b_target_[i];
+#ifdef MMTRACKER_DEBUG
+		std::cout << b_tg(i) << " "; 
+#endif
 	}
+#ifdef MMTRACKER_DEBUG
+	std::cout << std::endl; 
+#endif
 }
 
 
@@ -704,6 +719,10 @@ void MMTracker::optical_flow_step(cv::Mat& cvFrame,
 						cv::Rect2d tgroi(roix, roiy, 80, 80);
 						Eigen::Vector3d pos_;
 
+#ifdef MMTRACKER_DEBUG
+						std::cout << "New movement detected at: " << 
+							tgroi << std::endl;
+#endif
 						// Try to identify a target postion in the ROI
 						find_target_in_roi(pos_, tgroi);
 

@@ -268,16 +268,13 @@ bool MMTracker::get_ROI(int id, cv::Rect2d& roi) {
 	}
 }
 
-bool MMTracker::get_flowmask(int id, cv::Mat& m) {
+bool MMTracker::get_flowmask(cv::Mat& m) {
 	std::unique_lock<std::mutex> lk(_mx);
-	if (_targets.count(id) == 0) {
-		//std::cout << "No target with ID = " << id << std::endl;
-		return false;
-	} else {
-		//_targets[id]->flow_mask.copyTo(m);
+	if (!_flow_mask.empty()) {
 		_flow_mask.copyTo(m);
 		return true;
 	}
+	return false;
 }
 
 
@@ -649,7 +646,7 @@ void MMTracker::optical_flow_step(cv::Mat& cvFrame,
 		nonzero_pix.convertTo(nonzero_pix, CV_32FC2, 1, 0);
 
 		if (!flow_mask.empty()) {
-			_flow_mask = flow_mask;
+			flow_mask.copyTo(_flow_mask);
 		}
 
 		int Npix = nonzero_pix.total();

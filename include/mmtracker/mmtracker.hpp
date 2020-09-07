@@ -149,7 +149,7 @@ class MMTracker {
 
 		bool get_rgbROI(int i, cv::Mat& m); 
 
-		bool get_flowmask(int i, cv::Mat& m);
+		bool get_flowmask(cv::Mat& m);
 
 		void get_histogram(cv::Mat& hist_img, int numBins,
 				const cv::Mat& depth_roi, int target_depth);

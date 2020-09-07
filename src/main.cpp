@@ -372,7 +372,7 @@ int main(int argc, char* argv[]) {
 				cv::imshow("Mask", mask);
 
 			cv::Mat fl_mask;
-			trk->get_flowmask(selected_vehicle, fl_mask);
+			trk->get_flowmask(fl_mask);
 			if (!fl_mask.empty())
 				imshow("Flow", fl_mask);
 #endif
@@ -381,8 +381,8 @@ int main(int argc, char* argv[]) {
 			cv::Mat hist_img;
 			cv::Mat depth_roi;
 			std::array<int, 3> v;
-			trk->get_depthROI(0, depth_roi);
-			trk->get_depthTG(0, v);
+			trk->get_depthROI(selected_vehicle, depth_roi);
+			trk->get_depthTG(selected_vehicle, v);
 			int numBins = 200;	
 			if (!depth_roi.empty()) {
 				trk->get_histogram(hist_img, numBins, depth_roi, v[2]);

@@ -361,6 +361,7 @@ void RSTracker::opticalflow_runnable() {
 						"> Not a good match" << std::endl;
 					std::cout << "Map: " << el.pos.transpose() << std::endl;
 					std::cout << "Detected: " << W_t.transpose() << std::endl;
+					std::cout << "w.r.t Cam: " << dtc_p.b_tg.transpose() << std::endl;
 				}
 			}
 		}

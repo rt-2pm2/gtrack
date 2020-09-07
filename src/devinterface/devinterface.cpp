@@ -157,19 +157,34 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 	}
 	profile = _pipeline.start(_cfg);
 	std::cout << "Pipeline started!" << std::endl;
+//
 
 	// Now that the device is started I can get information
 	// about the sensors and finish the configuration.
-	rs2::depth_sensor d_sensor = profile.get_device().first<rs2::depth_sensor>();
-	if (d_sensor && d_sensor.is<rs2::depth_stereo_sensor>()) {
-		if (operation != RSTRK_PLAYBACK) {
-			// Set Accuracy
-			d_sensor.set_option(RS2_OPTION_VISUAL_PRESET,
-					RS2_RS400_VISUAL_PRESET_HIGH_DENSITY);
 
-			// Set Depth Scale
-			d_sensor.set_option(RS2_OPTION_DEPTH_UNITS,
-					dev_cfg.depth_scale);
+	if (operation != RSTRK_PLAYBACK) {
+		rs2::depth_sensor d_sensor = profile.get_device().first<rs2::depth_sensor>();
+		if (d_sensor) {
+			if (d_sensor.is<rs2::depth_stereo_sensor>()) {
+				// Set Accuracy
+				std::cout << "DEPTH STEREO SENSOR: Setting preset" << std::endl;
+				d_sensor.set_option(RS2_OPTION_VISUAL_PRESET,
+						RS2_RS400_VISUAL_PRESET_HIGH_DENSITY);
+
+				// Set Depth Scale
+				d_sensor.set_option(RS2_OPTION_DEPTH_UNITS,
+						dev_cfg.depth_scale);
+			}
+			if (d_sensor.is<rs2::depth_sensor>()) {
+				// Set Accuracy
+				std::cout << "DEPTH SENSOR: Setting preset" << std::endl;
+				d_sensor.set_option(RS2_OPTION_VISUAL_PRESET,
+						RS2_L500_VISUAL_PRESET_MAX_RANGE);
+
+				// Set Depth Scale
+				d_sensor.set_option(RS2_OPTION_DEPTH_UNITS,
+						dev_cfg.depth_scale);
+			}
 		}
 	}
 

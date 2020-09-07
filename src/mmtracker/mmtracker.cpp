@@ -406,6 +406,7 @@ bool MMTracker::find_target_in_roi(TargetData* tg_data,
 		// compute the center of mass of the selected region.
 		cv::Moments Mm = cv::moments(mask);
 		tg_data->depth_mask_moments = Mm;
+		tg_data->depth_mask = mask;
 
 		int depth_tg[3];
 		int depth_tg_std[3];

@@ -120,17 +120,30 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 			_isplayback = false;
 
 			_cfg.enable_device(_serial);
+			std::cout << _dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE) << std::endl;
 
 			// Configure the pipeline
-			_cfg.enable_stream(RS2_STREAM_DEPTH,
-					dev_cfg.depth_width, dev_cfg.depth_height,
-					dev_cfg.depth_format,
-					dev_cfg.depth_framerate);
+			if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) != "L500") {
+				_cfg.enable_stream(RS2_STREAM_DEPTH,
+						dev_cfg.depth_width, dev_cfg.depth_height,
+						dev_cfg.depth_format,
+						dev_cfg.depth_framerate);
 
-			_cfg.enable_stream(RS2_STREAM_COLOR,
-					dev_cfg.rgb_width, dev_cfg.rgb_height,
-					dev_cfg.rgb_format,
-					dev_cfg.rgb_framerate);
+				_cfg.enable_stream(RS2_STREAM_COLOR,
+						dev_cfg.rgb_width, dev_cfg.rgb_height,
+						dev_cfg.rgb_format,
+						dev_cfg.rgb_framerate);
+			} else {
+				_cfg.enable_stream(RS2_STREAM_DEPTH,
+						1024, 768,
+						dev_cfg.depth_format,
+						dev_cfg.depth_framerate);
+
+				_cfg.enable_stream(RS2_STREAM_COLOR,
+						dev_cfg.rgb_width, dev_cfg.rgb_height,
+						dev_cfg.rgb_format,
+						dev_cfg.rgb_framerate);
+			}
 
 			std::cout << "Starting Pipeline[" << _serial << 
 				"]..." << std::endl;

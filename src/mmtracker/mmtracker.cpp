@@ -39,10 +39,13 @@ void MMTracker::ResetMMParam() {
 	poly_sigma = poly_n * 0.2;
 	flags = 0;
 
-	_log_flow.open(_mmtracker_name + "trk_flow_log.csv");
+	_log_flow.open(_mmtracker_name + "_trk_flow_log.csv");
 	_log_flow << "time[us] min_flow max_flow Npix" << std::endl;
 
-	_log_trk.open(_mmtracker_name + "trk_log.csv");
+	_log_trk.open(_mmtracker_name + "_trk_log.csv");
+	
+	_log_debug_trk.open(_mmtracker_name + "_trk_debug_log.txt");
+
 	
 }
 
@@ -50,6 +53,7 @@ void MMTracker::ResetMMParam() {
 MMTracker::~MMTracker() {
 	_log_flow.close();
 	_log_trk.close();
+	_log_debug_trk.close();
 
 	for (auto el : _targets) {
 		delete el.second;
@@ -222,10 +226,12 @@ int MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 				b_target_[2] << std::endl;
 			el_it++;
 		} else {
+#ifdef MMTRACKER_DEBUG
 			std::cout << "<" << _mmtracker_name << "> " <<
-				"[" << t_micro << "]" << "Depth not valid" << std::endl;	
-			_log_trk << "[" << t_micro << "]" <<
-				"Depth not valid" << std::endl;	
+				"[" << t_micro << "]" << "Depth not valid" << std::endl;
+#endif
+			_log_debug_trk << "[" << t_micro << "] in " <<
+				tg_data->rgb_roi << ": Depth not valid" << std::endl;	
 
 			/*
 			   img_x_global = local_roi.tl().x + local_roi.width;

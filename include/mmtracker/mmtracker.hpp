@@ -187,6 +187,7 @@ class MMTracker {
 		 */
 		std::ofstream _log_flow;
 		std::ofstream _log_trk;
+		std::ofstream _log_debug_trk;
 
 
 		/**

@@ -391,7 +391,7 @@ void RSTracker::opticalflow_runnable() {
 					_logfile << timespec2micro(&t_now) << 
 						" [" << _pdev->getSerial() <<
 						"] Locking new target [" << el.id <<
-						"]!" << std::endl;
+						"]!" << std::endl << std::endl;
 				} else {
 #ifdef RSTRACKER_DEBUG
 					std::cout << "[" << _pdev->getSerial() <<
@@ -399,7 +399,7 @@ void RSTracker::opticalflow_runnable() {
 						"Map: " << el.pos.transpose() << std::endl <<
 						"Detected: " << W_t.transpose() << std::endl <<
 						"w.r.t Cam: " << dtc_p.b_tg.transpose() << std::endl <<
-						"Cam: " << _w_p_wc.transpose() << std::endl;
+						"Cam: " << _w_p_wc.transpose() << std::endl << std::endl;
 #endif
 					_logfile << timespec2micro(&t_now) <<
 						" [" << _pdev->getSerial() <<
@@ -407,7 +407,7 @@ void RSTracker::opticalflow_runnable() {
 						"Map: " << el.pos.transpose() << std::endl <<
 						"Detected: " << W_t.transpose() << std::endl <<
 						"w.r.t Cam: " << dtc_p.b_tg.transpose() << std::endl <<
-						"Cam: " << _w_p_wc.transpose() << std::endl;
+						"Cam: " << _w_p_wc.transpose() << std::endl << std::endl;;
 				}
 			}
 		}

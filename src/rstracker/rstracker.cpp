@@ -371,6 +371,12 @@ void RSTracker::opticalflow_runnable() {
 		timespec t_now;
 		clock_gettime(CLOCK_MONOTONIC, &t_now);
 
+#ifdef RSTRACKER_DEBUG
+					std::cout << "<" << _pdev->getSerial() <<
+						"> Checking " << untracked_points.size() <<
+						" new targets!" << std::endl;
+#endif
+
 		for (auto dtc_p : untracked_points) {
 			// Compute the Word Frame position of the
 			// identified point.

@@ -163,6 +163,7 @@ class RSTracker {
 		cv::Mat _ddsf;
 
 		std::ofstream _outfile;
+		std::ofstream _logfile;
 };
 
 #endif

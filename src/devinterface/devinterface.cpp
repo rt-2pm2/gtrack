@@ -350,12 +350,25 @@ void DeviceInterface::filtering() {
 	rs2::disparity_transform disparity2depth(false);
 
 	rs2::spatial_filter spat;
-	spat.set_option(RS2_OPTION_HOLES_FILL, 2);
-	spat.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.5);
+	rs2::temporal_filter temp;
 
-	rs2::temporal_filter temp(0.4, 20, 2);
-	temp.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.8);
-	temp.set_option(RS2_OPTION_FILTER_SMOOTH_DELTA, 20);
+	if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) != "D400") {
+		spat.set_option(RS2_OPTION_HOLES_FILL, 2);
+		spat.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.5);
+
+		temp = rs2::temporal_filter(0.4, 20, 2);
+		temp.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.8);
+		temp.set_option(RS2_OPTION_FILTER_SMOOTH_DELTA, 20);
+	}
+
+	if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) != "L500") {
+		spat.set_option(RS2_OPTION_HOLES_FILL, 2);
+		spat.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 1.5);
+
+		temp = rs2::temporal_filter(1.0, 100, 2);
+		temp.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.8);
+		temp.set_option(RS2_OPTION_FILTER_SMOOTH_DELTA, 100);
+	}
 
 	rs2::colorizer color_map;
 
@@ -391,8 +404,10 @@ void DeviceInterface::filtering() {
 			fs_filt = fs_raw;
 			fs_filt = fs_filt.apply_filter(dec);
 			fs_filt = fs_filt.apply_filter(depth2disparity);
-			fs_filt = fs_filt.apply_filter(spat);
-			fs_filt = fs_filt.apply_filter(temp);
+			if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) != "D400") {
+				fs_filt = fs_filt.apply_filter(spat);
+				fs_filt = fs_filt.apply_filter(temp);
+			}
 			fs_filt = fs_filt.apply_filter(disparity2depth);
 			fs_filt = fs_filt.apply_filter(align_to_rgb);
 
@@ -409,9 +424,9 @@ void DeviceInterface::filtering() {
 			// The conversion of the depth into colored image takes 
 			// between 5 to 10 ms!
 			//
-			//frame2Mat(depthc_cv, depth_rs.apply_filter(color_map),
-			//		CV_8UC3, 1);
-			//data.set_depth_col(depthc_cv);
+			frame2Mat(depthc_cv, depth_rs.apply_filter(color_map),
+					CV_8UC3, 1);
+			data.set_depth_col(depthc_cv);
 			clock_gettime(CLOCK_MONOTONIC, &t2);
 
 			dt = (timespec2micro(&t2) - timespec2micro(&t1)) / 1e6;

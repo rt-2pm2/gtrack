@@ -160,18 +160,10 @@ bool GAtlas::getTransform(int orig, int dest, TransformData& tr) {
 
 	std::unique_lock<std::mutex> lk(_atlasdata_mx);
 
-	// Check whether the nodes are in the map
-	if (_gatlas.count(orig) == 0 || _gatlas.count(dest) == 0) {
-		return false;
-	}
-
 	_visited.clear(); 
 	if (find_path(orig, dest, tr)) {
 		success = true;;
 	}
-	// Just to be sure...
-	_visited.clear();
-
 	lk.unlock();
 
 	if (!success && client) { // If not locally... 
@@ -223,7 +215,10 @@ int GAtlas::get_items(std::vector<TargetData>& vout) {
 bool GAtlas::find_path(int s, int e, TransformData& TR) {
 	bool out = false;
 
-	
+	// Check whether the nodes are in the map
+	if (_gatlas.count(s) == 0 || _gatlas.count(e) == 0) {
+		return false;
+	}
 
 	// Add the current node to the set of visited nodes
 	_visited.insert(s);
@@ -238,7 +233,6 @@ bool GAtlas::find_path(int s, int e, TransformData& TR) {
 
 	// Nodes connected to the current node 's' 
 	std::unordered_map<int, TransformData> rels = _gatlas[s].relations;
-
 
 	// For each connected node
 	for (auto el : rels) {

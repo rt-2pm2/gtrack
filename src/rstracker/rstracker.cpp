@@ -27,6 +27,7 @@ RSTracker::RSTracker(DeviceInterface* pdev) {
 	_shutting_down = false;
 
 	_outfile.open(_pdev->getSerial() + "est.csv");
+	_logfile.open("log_rstrk<" + _pdev->getSerial() + ">.txt");
 
 	_local_aruco_id = 0;
 	_global_aruco_ref = 0;
@@ -40,6 +41,7 @@ RSTracker::~RSTracker() {
 		std::cout << "Stopped optical flow thread!" << std::endl;
 	}
 	_outfile.close();
+	_logfile.close();
 }
 
 bool RSTracker::isReady() {
@@ -168,9 +170,15 @@ void RSTracker::autoSetWorldReference() {
 				_w_q_c * _aruco_map[_local_aruco_id].C_p_CM_; 
 
 			if (!_ready) {
-				std::cout << "CAMERA POSITION: " <<
+				std::cout << "[" << _pdev->getSerial() << "] CAMERA POSITION: " <<
 					_w_p_wc.transpose() << std::endl;
 			}
+
+			timespec t_now;
+			clock_gettime(CLOCK_MONOTONIC, &t_now);
+			_logfile << timespec2micro(&t_now) << " [" << _pdev->getSerial() << "] CAMERA POSITION: " <<
+					_w_p_wc.transpose() << std::endl;
+
 			_ready = true;
 		} else {
 			_ready = false;
@@ -355,6 +363,9 @@ void RSTracker::opticalflow_runnable() {
 		std::vector<gatlas::TargetData> atlas_items;
 		_gatlas->get_items(atlas_items);
 
+		timespec t_now;
+		clock_gettime(CLOCK_MONOTONIC, &t_now);
+
 		for (auto dtc_p : untracked_points) {
 			// Compute the Word Frame position of the
 			// identified point.
@@ -365,16 +376,33 @@ void RSTracker::opticalflow_runnable() {
 			for (auto el : atlas_items) {
 				double dist = (el.pos - W_t).norm();
 				if (dist < 0.2) {
+#ifdef RSTRACKER_DEBUG
 					std::cout << "<" << _pdev->getSerial() <<
 						"> Locking new target [" << el.id <<
 						"]!" << std::endl;
+#endif
 					_ptrk->add_target(el.id, dtc_p.roi);
+
+					_logfile << timespec2micro(&t_now) << 
+						" [" << _pdev->getSerial() <<
+						"] Locking new target [" << el.id <<
+						"]!" << std::endl;
 				} else {
-					std::cout << "<" << _pdev->getSerial() <<
-						"> Not a good match" << std::endl;
-					std::cout << "Map: " << el.pos.transpose() << std::endl;
-					std::cout << "Detected: " << W_t.transpose() << std::endl;
-					std::cout << "w.r.t Cam: " << dtc_p.b_tg.transpose() << std::endl;
+#ifdef RSTRACKER_DEBUG
+					std::cout << "[" << _pdev->getSerial() <<
+						"] Not a good match" << std::endl <<
+						"Map: " << el.pos.transpose() << std::endl <<
+						"Detected: " << W_t.transpose() << std::endl <<
+						"w.r.t Cam: " << dtc_p.b_tg.transpose() << std::endl <<
+						"Cam: " << _w_p_wc.transpose() << std::endl;
+#endif
+					_logfile << timespec2micro(&t_now) <<
+						" [" << _pdev->getSerial() <<
+						"] Not a good match" << std::endl <<
+						"Map: " << el.pos.transpose() << std::endl <<
+						"Detected: " << W_t.transpose() << std::endl <<
+						"w.r.t Cam: " << dtc_p.b_tg.transpose() << std::endl <<
+						"Cam: " << _w_p_wc.transpose() << std::endl;
 				}
 			}
 		}

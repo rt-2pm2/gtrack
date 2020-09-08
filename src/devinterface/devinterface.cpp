@@ -197,10 +197,15 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 				dev_cfg.depth_scale = d_sensor.get_option(RS2_OPTION_DEPTH_UNITS);
 			}
 
-		for (auto el : opt) {
-				std::cout << d_sensor.get_option_name(el) << " " << d_sensor.get_option(el) << std::endl;
+			// Print the settings of the device
+			for (auto el : opt) {
+				try {
+					std::cout << d_sensor.get_option_name(el) << " " << d_sensor.get_option(el) << std::endl;
+				} catch (rs2::invalid_value_error &t) {
+					std::cout << t.what() << std::endl;
+				}
+				std::cout << std::endl;
 			}
-		std::cout << std::endl;
 		}
 	}
 
@@ -352,7 +357,7 @@ void DeviceInterface::filtering() {
 	rs2::spatial_filter spat;
 	rs2::temporal_filter temp;
 
-	if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) != "D400") {
+	if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) == "D400") {
 		spat.set_option(RS2_OPTION_HOLES_FILL, 2);
 		spat.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.5);
 
@@ -361,9 +366,9 @@ void DeviceInterface::filtering() {
 		temp.set_option(RS2_OPTION_FILTER_SMOOTH_DELTA, 20);
 	}
 
-	if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) != "L500") {
+	if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) == "L500") {
 		spat.set_option(RS2_OPTION_HOLES_FILL, 2);
-		spat.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 1.5);
+		spat.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 1.0);
 
 		temp = rs2::temporal_filter(1.0, 100, 2);
 		temp.set_option(RS2_OPTION_FILTER_SMOOTH_ALPHA, 0.8);

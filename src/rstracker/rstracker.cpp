@@ -26,8 +26,9 @@ RSTracker::RSTracker(DeviceInterface* pdev) {
 	_ready = false;
 	_shutting_down = false;
 
-	_outfile.open(_pdev->getSerial() + "est.csv");
-	_logfile.open("log_rstrk<" + _pdev->getSerial() + ">.txt");
+	std::string serial = std::string(_pdev->getSerial());
+	_outfile.open(serial + "_est.csv");
+	_logfile.open(serial + "_log.txt");
 
 	_local_aruco_id = 0;
 	_global_aruco_ref = 0;
@@ -40,8 +41,11 @@ RSTracker::~RSTracker() {
 		_flow_thread.join();
 		std::cout << "Stopped optical flow thread!" << std::endl;
 	}
-	_outfile.close();
-	_logfile.close();
+	if (_outfile)
+		_outfile.close();
+
+	if (_logfile)
+		_logfile.close();
 }
 
 bool RSTracker::isReady() {
@@ -176,7 +180,8 @@ void RSTracker::autoSetWorldReference() {
 
 			timespec t_now;
 			clock_gettime(CLOCK_MONOTONIC, &t_now);
-			_logfile << timespec2micro(&t_now) << " [" << _pdev->getSerial() << "] CAMERA POSITION: " <<
+			_logfile << timespec2micro(&t_now) <<
+				" [" << _pdev->getSerial() << "] CAMERA POSITION: " <<
 					_w_p_wc.transpose() << std::endl;
 
 			_ready = true;

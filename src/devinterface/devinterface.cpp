@@ -409,7 +409,7 @@ void DeviceInterface::filtering() {
 			fs_filt = fs_raw;
 			fs_filt = fs_filt.apply_filter(dec);
 			fs_filt = fs_filt.apply_filter(depth2disparity);
-			if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) != "D400") {
+			if (std::string(_dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE)) == "D400") {
 				fs_filt = fs_filt.apply_filter(spat);
 				fs_filt = fs_filt.apply_filter(temp);
 			}

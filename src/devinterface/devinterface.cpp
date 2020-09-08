@@ -204,8 +204,8 @@ bool DeviceInterface::startDevice(int operation, std::string bag_fname = "") {
 				} catch (rs2::invalid_value_error &t) {
 					std::cout << t.what() << std::endl;
 				}
-				std::cout << std::endl;
 			}
+			std::cout << std::endl;
 		}
 	}
 

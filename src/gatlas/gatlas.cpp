@@ -175,13 +175,13 @@ bool GAtlas::getTransform(int orig, int dest, TransformData& tr) {
 
 
 std::unordered_map<int, TargetData> GAtlas::getMap() {
-	std::lock_guard<std::mutex> {_targetdata_mx};
+	std::lock_guard<std::mutex> lk(_targetdata_mx);
 	return _targetdata;	
 }
 
 
 int GAtlas::get_items(std::vector<TargetData>& vout) {
-	std::lock_guard<std::mutex> {_targetdata_mx};
+	std::lock_guard<std::mutex> lk(_targetdata_mx);
 	// Download the full map and update the elements
 	if (client) {
 		RpcPointData_v worlddata;

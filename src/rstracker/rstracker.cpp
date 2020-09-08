@@ -366,15 +366,19 @@ void RSTracker::opticalflow_runnable() {
 		
 		// Check in the global map if there is something there
 		std::vector<gatlas::TargetData> atlas_items;
-		_gatlas->get_items(atlas_items);
+		int ntargets = _gatlas->get_items(atlas_items);
 
 		timespec t_now;
 		clock_gettime(CLOCK_MONOTONIC, &t_now);
 
 #ifdef RSTRACKER_DEBUG
-					std::cout << "<" << _pdev->getSerial() <<
-						"> Checking " << untracked_points.size() <<
-						" new targets!" << std::endl;
+		if (untracked_points.size() > 0) {
+			std::cout << "<" << _pdev->getSerial() <<
+				"> Checking " << untracked_points.size() <<
+				" new targets!" << std::endl;
+			std::cout << ntargets <<
+				" targets in the atlas." << std::endl;
+		}
 #endif
 
 		for (auto dtc_p : untracked_points) {

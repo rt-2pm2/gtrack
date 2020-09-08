@@ -21,6 +21,7 @@ double sub_timespec(const timespec* t1, const timespec* t2) {
 	}
 
 	out = sec + nsec / 1e9;
+	return out;
 }
 
 uint64_t timespec2micro(const timespec* t) {

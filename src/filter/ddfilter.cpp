@@ -226,6 +226,7 @@ DDDynMat DDFilter::computeA(double T) {
 DDCMat DDFilter::computeC() {
 	_C = DDCMat::Zero();
 	_C.block<3,3>(0, 0) = Matrix<double, 3, 3>::Identity();
+	return _C;
 }
 
 

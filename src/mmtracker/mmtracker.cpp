@@ -28,7 +28,7 @@ void MMTracker::ResetMMParam() {
 	_min_flow_threshold = 0.6;
 	_min_flow_threshold_norm = 0.7;
 
-	_opt_flow_scale = 0.5;
+	_opt_flow_scale = 0.3;
 	_opt_flow_detect_thr = 150.0;
 	
 	pyr_scale = 0.5;
@@ -240,7 +240,7 @@ int MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 				tg_data->roi << "Target ID: " << tg_data->id << 
 				" Depth not valid" << std::endl;
 
-			if (tg_data->bad_meas > 2) {
+			if (tg_data->bad_meas > 5) {
 				/*
 				   img_x_global = local_roi.tl().x + local_roi.width;
 				   img_y_global = local_roi.tl().y + local_roi.height;
@@ -447,8 +447,8 @@ bool MMTracker::find_target_in_roi(TargetData* tg_data,
 		// The std of the target area is used to update the height and
 		// width. 
 		// The ROI is moved in the center of the target.
-		tg_data->roi.height = std::min(80, std::max(5 * img_x_std, 80));
-		tg_data->roi.width = std::min(130, std::max(5 * img_y_std, 130));
+		tg_data->roi.height = std::min(100, std::max(5 * img_x_std, 100));
+		tg_data->roi.width = std::min(140, std::max(5 * img_y_std, 140));
 
 		int base_x = img_x_global - (tg_data->roi.width / 2.0);
 		int base_y = img_y_global - (tg_data->roi.height / 2.0);
@@ -724,17 +724,17 @@ void MMTracker::optical_flow_step(cv::Mat& cvFrame,
 
 					if (newroi) {
 						// Define a ROI in the area of the movement
-						int base_x = p.x - 40;
-						int base_y = p.y - 40;
+						int base_x = p.x - 60;
+						int base_y = p.y - 60;
 
 						int roix = std::max(0,
-								std::min(base_x, _frame_width - 80)
+								std::min(base_x, _frame_width - 120)
 								);
 						int roiy = std::max(0,
-								std::min(base_y, _frame_height - 80)
+								std::min(base_y, _frame_height - 120)
 								);
 
-						cv::Rect2d tgroi(roix, roiy, 80, 80);
+						cv::Rect2d tgroi(roix, roiy, 120, 120);
 						Eigen::Vector3d pos_;
 
 #ifdef MMTRACKER_DEBUG

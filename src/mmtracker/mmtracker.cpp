@@ -167,7 +167,7 @@ int MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 	//XXX I should improve the way I protect the variables
 	std::unique_lock<std::mutex> lk(_mx);
 	int nclust = 4;
-	int attempts = 1;
+	int attempts = 2;
 
 	// Copy the RGB frame to the internal variable
 	rgb.copyTo(cvFrame);
@@ -232,15 +232,24 @@ int MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 		} else {
 			tg_data->bad_meas++;
 #ifdef MMTRACKER_DEBUG
-			std::cout << "<" << _mmtracker_name << "> " <<
-				"[" << t_micro << "]" << "Target ID: " << tg_data->id << 
-				" Depth not valid" << std::endl;
+			std::cout << "[" << t_micro << "] in " <<
+				tg_data->roi << "Target ID: " << tg_data->id << 
+				" <"<< tg_data->bad_meas << "> Depth not valid" <<
+				std::endl;
 #endif
 			_log_debug_trk << "[" << t_micro << "] in " <<
 				tg_data->roi << "Target ID: " << tg_data->id << 
-				" Depth not valid" << std::endl;
+				" <"<< tg_data->bad_meas << "> Depth not valid" <<
+				std::endl;
 
 			if (tg_data->bad_meas > 15) {
+#ifdef MMTRACKER_DEBUG
+				std::cout << "<" << _mmtracker_name << "> " <<
+					"[" << t_micro << "]" << "Target ID: " << tg_data->id <<
+					" <"<< tg_data->bad_meas << "> REMOVING TARGET" <<
+					std::endl;
+#endif
+
 				/*
 				   img_x_global = local_roi.tl().x + local_roi.width;
 				   img_y_global = local_roi.tl().y + local_roi.height;
@@ -469,7 +478,6 @@ bool MMTracker::find_target_in_roi(TargetData* tg_data,
 		tg_data->depth_tg_std[2] = depth_tg_std[2];
 		
 	} 
-
 	return depthvalid;
 }
 

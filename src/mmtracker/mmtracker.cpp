@@ -85,6 +85,7 @@ void MMTracker::add_target(int id, cv::Rect2d roi) {
 		TargetData* p_td = new TargetData();
 		p_td->id = id;
 		p_td->roi = roi;
+		p_td->bad_meas = 0;
 		_targets.insert(std::pair<int, TargetData*>(id, p_td));
 
 		//opt_tracker->init(cvFrame, roi);
@@ -206,7 +207,10 @@ int MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 		//bool ok = opt_tracker->update(cvFrame, local_roi);
 		bool measvalid = find_target_in_roi(tg_data, nclust, attempts);
 
-		if (measvalid) {
+		if (measvalid) {	
+			// Reset counter of bad measurement
+			tg_data->bad_meas = 0;
+
 			// Get the target position with respect to the camera frame
 			float b_target_[3] {};
 			float upixel[2] {
@@ -226,23 +230,30 @@ int MMTracker::step(cv::Mat& rgb, cv::Mat& depth) {
 				b_target_[2] << std::endl;
 			el_it++;
 		} else {
+			tg_data->bad_meas++;
 #ifdef MMTRACKER_DEBUG
 			std::cout << "<" << _mmtracker_name << "> " <<
-				"[" << t_micro << "]" << "Depth not valid" << std::endl;
+				"[" << t_micro << "]" << "Target ID: " << tg_data->id << 
+				" Depth not valid" << std::endl;
 #endif
 			_log_debug_trk << "[" << t_micro << "] in " <<
-				tg_data->rgb_roi << ": Depth not valid" << std::endl;	
+				tg_data->roi << "Target ID: " << tg_data->id << 
+				" Depth not valid" << std::endl;
 
-			/*
-			   img_x_global = local_roi.tl().x + local_roi.width;
-			   img_y_global = local_roi.tl().y + local_roi.height;
-			   tg_data->roi = local_roi;
-			*/	
+			if (tg_data->bad_meas > 2) {
+				/*
+				   img_x_global = local_roi.tl().x + local_roi.width;
+				   img_y_global = local_roi.tl().y + local_roi.height;
+				   tg_data->roi = local_roi;
+				   */	
 
-			// If the depth measurement was not valid remove the 
-			// target from the local map of the tracked vehicles.
-			delete el_it->second;
-			el_it = _targets.erase(el_it);
+				// If the depth measurement was not valid remove the 
+				// target from the local map of the tracked vehicles.
+				delete el_it->second;
+				el_it = _targets.erase(el_it);
+			} else {
+				el_it++;
+			}
 		}
 	}
 	out = _targets.size();

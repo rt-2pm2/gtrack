@@ -34,6 +34,8 @@ namespace mmtracker {
  * is with respect to sensor.
  */
 struct TargetData {
+
+	TargetData() : bad_meas(0) {}
 	/**
 	 * ID
 	 */
@@ -90,6 +92,12 @@ struct TargetData {
 	 * target.
 	 */
 	cv::Mat depth_roi;
+
+
+	/**
+	 * Counter of bad measurements
+	 */
+	int bad_meas;
 };
 
 
